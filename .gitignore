@@ -1,0 +1,11 @@
+target/
+*.class
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Pasta de dados do usuário (certificados reais, regras e config) nunca deve ser versionada
+.atividades-complementares/
+certificados-reais/
+certificados/
