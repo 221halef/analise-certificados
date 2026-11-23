@@ -19,6 +19,8 @@ public class Atividade {
     private Status status;
     private String observacao;
     private boolean ignorado;
+    private boolean categoriaManual;
+    private boolean editado;
 
     public Atividade(String arquivoNome, Path caminhoArquivo, String hashSha256) {
         this.arquivoNome = arquivoNome;
@@ -128,6 +130,22 @@ public class Atividade {
 
     public void setIgnorado(boolean ignorado) {
         this.ignorado = ignorado;
+    }
+
+    public boolean isCategoriaManual() {
+        return categoriaManual;
+    }
+
+    public void setCategoriaManual(boolean categoriaManual) {
+        this.categoriaManual = categoriaManual;
+    }
+
+    public boolean isEditado() {
+        return editado;
+    }
+
+    public void setEditado(boolean editado) {
+        this.editado = editado;
     }
 
     public boolean contaNaSoma() {

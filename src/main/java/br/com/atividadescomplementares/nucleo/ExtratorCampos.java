@@ -33,6 +33,8 @@ public class ExtratorCampos {
             Pattern.compile("carga\\s+hor[aá]ria\\s*[:\\-]?\\s*(\\d+[.,]?\\d*)\\s*h(?:oras?)?\\b", Pattern.CASE_INSENSITIVE),
             Pattern.compile("\\bCH\\s*[:\\-]?\\s*(\\d+[.,]?\\d*)", Pattern.CASE_INSENSITIVE),
             Pattern.compile("dura[cç][aã]o\\s*[:\\-]?\\s*de?\\s*(\\d+[.,]?\\d*)\\s*horas?", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(?:workload|duration|total\\s+hours|hours)\\s*[:\\-]?\\s*(?:of\\s+)?(\\d+[.,]?\\d*)", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(\\d+[.,]?\\d*)[\\s\\-]*hours?\\b", Pattern.CASE_INSENSITIVE),
             Pattern.compile("(\\d+[.,]?\\d*)\\s*horas?\\b", Pattern.CASE_INSENSITIVE),
             Pattern.compile("(\\d+[.,]?\\d*)\\s*h\\b", Pattern.CASE_INSENSITIVE)
     };
@@ -54,7 +56,7 @@ public class ExtratorCampos {
     private static final Pattern[] PADROES_TITULO = {
             Pattern.compile("[\"“]([^\"”]+)[\"”]"),
             Pattern.compile(
-                    "(?:curso|palestra|minicurso|oficina|workshop|programa\\s+de\\s+extens[aã]o|projeto\\s+de\\s+extens[aã]o|est[aá]gio|monitoria)\\s+(?:de|em|no\\s+curso\\s+de)?\\s*([^,;.\"”]+)",
+                    "(?:course|curso|palestra|minicurso|oficina|workshop|programa\\s+de\\s+extens[aã]o|projeto\\s+de\\s+extens[aã]o|est[aá]gio|monitoria)\\s+(?:(?:de|em|of|in|on|no\\s+curso\\s+de)\\b)?\\s*([^,;.\"”]+)",
                     Pattern.CASE_INSENSITIVE)
     };
 

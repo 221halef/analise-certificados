@@ -2,17 +2,20 @@ package br.com.atividadescomplementares.ui;
 
 import atlantafx.base.theme.PrimerDark;
 import atlantafx.base.theme.PrimerLight;
+import br.com.atividadescomplementares.nucleo.ArmazenamentoAtividades;
 import br.com.atividadescomplementares.nucleo.ArquivoConfig;
 import br.com.atividadescomplementares.nucleo.ArquivoCsv;
 import br.com.atividadescomplementares.nucleo.Atividade;
 import br.com.atividadescomplementares.nucleo.Categoria;
 import br.com.atividadescomplementares.nucleo.Classificador;
+import br.com.atividadescomplementares.nucleo.EdicoesManuais;
 import br.com.atividadescomplementares.nucleo.PastaDados;
 import br.com.atividadescomplementares.nucleo.Processamento;
 import br.com.atividadescomplementares.nucleo.ProcessadorPasta;
 import br.com.atividadescomplementares.nucleo.ResultadoCalculo;
 import br.com.atividadescomplementares.nucleo.ResumoCategoria;
 import br.com.atividadescomplementares.nucleo.Status;
+import br.com.atividadescomplementares.nucleo.Validacao;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
@@ -23,6 +26,13 @@ import javafx.scene.Cursor;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.DatePicker;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.TextField;
 import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.TreeItem;
@@ -32,9 +42,13 @@ import javafx.scene.control.TreeTableRow;
 import javafx.scene.control.TreeTableView;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.Dragboard;
 import javafx.scene.input.MouseButton;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -46,6 +60,7 @@ import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javafx.util.StringConverter;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
@@ -55,6 +70,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -66,6 +84,7 @@ public class JanelaPrincipal {
 
     private static final String NOME_ARQUIVO_CATEGORIAS = "categorias.properties";
     private static final String NOME_ARQUIVO_CONFIG = "config.properties";
+    private static final String NOME_ARQUIVO_ATIVIDADES = "atividades.csv";
 
     private static final double LARGURA_COLUNA_DATA = 120;
     private static final double LARGURA_COLUNA_HORAS = 110;
@@ -77,6 +96,7 @@ public class JanelaPrincipal {
     private final ProcessadorPasta processadorPasta = new ProcessadorPasta();
     private final ArquivoConfig arquivoConfig = new ArquivoConfig();
     private final ArquivoCsv arquivoCsv = new ArquivoCsv();
+    private final ArmazenamentoAtividades armazenamento = new ArmazenamentoAtividades();
 
     private final Map<String, Image> cachePreVisualizacao = new HashMap<>();
 
@@ -87,6 +107,8 @@ public class JanelaPrincipal {
     private List<Atividade> atividades = new ArrayList<>();
     private Classificador classificador;
     private Atividade atividadeSelecionada;
+    private Atividade atividadeArrastada;
+    private Categoria categoriaParaExpandir;
 
     private Label rotuloTotalHoras;
     private FlowPane legendaCategorias;
@@ -95,6 +117,7 @@ public class JanelaPrincipal {
     private TreeTableView<LinhaTabela> tabela;
     private ImageView visualizadorPreview;
     private Label mensagemPreview;
+    private Button botaoEditar;
 
     public void iniciar(Stage palcoPrincipal) {
         this.palco = palcoPrincipal;
@@ -132,6 +155,25 @@ public class JanelaPrincipal {
 
         Path caminhoConfig = pastaDados.obterPasta().resolve(NOME_ARQUIVO_CONFIG);
         temaAtual = arquivoConfig.lerTema(caminhoConfig);
+        pastaSelecionada = arquivoConfig.lerPasta(caminhoConfig);
+
+        try {
+            atividades = armazenamento.carregar(pastaDados.obterPasta().resolve(NOME_ARQUIVO_ATIVIDADES));
+            atividades.forEach(Validacao::atualizarStatus);
+        } catch (IOException erro) {
+            atividades = new ArrayList<>();
+            mostrarErro("Não foi possível carregar os certificados salvos: " + erro.getMessage());
+        }
+    }
+
+    private void salvarEstado() {
+        try {
+            Path pasta = pastaDados.obterPasta();
+            armazenamento.salvar(atividades, pasta.resolve(NOME_ARQUIVO_ATIVIDADES));
+            arquivoConfig.salvarPasta(pastaSelecionada, pasta.resolve(NOME_ARQUIVO_CONFIG));
+        } catch (IOException erro) {
+            mostrarErro("Não foi possível salvar os certificados: " + erro.getMessage());
+        }
     }
 
     private Button criarBotao(String texto, String icone, String classeEstilo) {
@@ -158,12 +200,9 @@ public class JanelaPrincipal {
         Button botaoPasta = criarBotao("Pasta", "pasta", "botao-secundario");
         botaoPasta.setOnAction(evento -> escolherPasta());
 
-        Button botaoAbrirCsv = criarBotao("Abrir CSV", "arquivo", "botao-secundario");
-        botaoAbrirCsv.setOnAction(evento -> abrirCsv());
-
         InterruptorTema interruptor = new InterruptorTema(temaAtual.equals("escuro"), this::alternarTema);
 
-        HBox barra = new HBox(12, grupoTitulo, criarEspacador(), botaoPasta, botaoAbrirCsv, interruptor);
+        HBox barra = new HBox(12, grupoTitulo, criarEspacador(), botaoPasta, interruptor);
         barra.setPadding(new Insets(16, 24, 16, 24));
         barra.setAlignment(Pos.CENTER_LEFT);
         barra.getStyleClass().add("barra-superior");
@@ -291,6 +330,15 @@ public class JanelaPrincipal {
                     alternarIgnorado(linha.getItem().getAtividade());
                 }
             });
+            configurarArrastar(linha);
+
+            MenuItem itemEditar = new MenuItem("Editar...");
+            itemEditar.setOnAction(evento -> editarAtividade(linha.getItem().getAtividade()));
+            MenuItem itemIgnorar = new MenuItem("Ignorar / considerar na soma");
+            itemIgnorar.setOnAction(evento -> alternarIgnorado(linha.getItem().getAtividade()));
+            ContextMenu menuContexto = new ContextMenu(itemEditar, itemIgnorar);
+            linha.itemProperty().addListener((observavel, antigo, novo) ->
+                    linha.setContextMenu(novo == null || novo.isEhCategoria() ? null : menuContexto));
             return linha;
         });
 
@@ -303,6 +351,85 @@ public class JanelaPrincipal {
         });
 
         return arvore;
+    }
+
+    private static final String CLASSE_ALVO_DROP = "linha-alvo-drop";
+
+    private void configurarArrastar(TreeTableRow<LinhaTabela> linha) {
+        linha.setOnDragDetected(evento -> {
+            LinhaTabela item = linha.getItem();
+            if (item == null || item.isEhCategoria()) {
+                return;
+            }
+            Dragboard quadro = linha.startDragAndDrop(TransferMode.MOVE);
+            ClipboardContent conteudo = new ClipboardContent();
+            conteudo.putString(item.getAtividade().getArquivoNome());
+            quadro.setContent(conteudo);
+            atividadeArrastada = item.getAtividade();
+            evento.consume();
+        });
+
+        linha.setOnDragOver(evento -> {
+            if (podeSoltarEm(linha.getItem())) {
+                evento.acceptTransferModes(TransferMode.MOVE);
+            }
+            evento.consume();
+        });
+
+        linha.setOnDragEntered(evento -> {
+            if (podeSoltarEm(linha.getItem()) && !linha.getStyleClass().contains(CLASSE_ALVO_DROP)) {
+                linha.getStyleClass().add(CLASSE_ALVO_DROP);
+            }
+        });
+
+        linha.setOnDragExited(evento -> linha.getStyleClass().remove(CLASSE_ALVO_DROP));
+
+        linha.setOnDragDropped(evento -> {
+            linha.getStyleClass().remove(CLASSE_ALVO_DROP);
+            boolean sucesso = false;
+            LinhaTabela alvo = linha.getItem();
+            if (podeSoltarEm(alvo)) {
+                Atividade movida = atividadeArrastada;
+                Categoria destino = alvo.getCategoria();
+                sucesso = true;
+                Platform.runLater(() -> moverParaCategoria(movida, destino));
+            }
+            evento.setDropCompleted(sucesso);
+            evento.consume();
+        });
+
+        linha.setOnDragDone(evento -> atividadeArrastada = null);
+    }
+
+    private boolean podeSoltarEm(LinhaTabela alvo) {
+        return atividadeArrastada != null
+                && alvo != null
+                && alvo.getCategoria() != atividadeArrastada.getCategoria();
+    }
+
+    private void moverParaCategoria(Atividade atividade, Categoria destino) {
+        atividade.setCategoria(destino);
+        atividade.setCategoriaManual(true);
+        categoriaParaExpandir = destino;
+        Validacao.atualizarStatus(atividade);
+        atualizarTabela();
+        salvarEstado();
+        selecionarAtividade(atividade);
+    }
+
+    private void selecionarAtividade(Atividade atividade) {
+        TreeItem<LinhaTabela> raizArvore = tabela.getRoot();
+        if (raizArvore == null) {
+            return;
+        }
+        for (TreeItem<LinhaTabela> itemCategoria : raizArvore.getChildren()) {
+            for (TreeItem<LinhaTabela> itemAtividade : itemCategoria.getChildren()) {
+                if (itemAtividade.getValue().getAtividade() == atividade) {
+                    tabela.getSelectionModel().select(itemAtividade);
+                    return;
+                }
+            }
+        }
     }
 
     private TreeTableCell<LinhaTabela, String> criarCelulaTitulo() {
@@ -414,7 +541,12 @@ public class JanelaPrincipal {
                         caixa.getChildren().add(seta);
                     }
                 } else {
-                    caixa.getChildren().add(criarSelo(valor, linha.getEstiloStatus()));
+                    Label selo = criarSelo(valor, linha.getEstiloStatus());
+                    String observacao = linha.getAtividade().getObservacao();
+                    if (observacao != null && !observacao.isBlank()) {
+                        selo.setTooltip(new Tooltip(observacao));
+                    }
+                    caixa.getChildren().add(selo);
                 }
 
                 setGraphic(caixa);
@@ -441,7 +573,18 @@ public class JanelaPrincipal {
         botaoAmpliar.setTooltip(new Tooltip("Ampliar pré-visualização"));
         botaoAmpliar.setOnAction(evento -> ampliarPreVisualizacao());
 
-        HBox cabecalho = new HBox(tituloPainel, criarEspacador(), botaoAmpliar);
+        botaoEditar = new Button();
+        botaoEditar.setGraphic(Icones.criar("editar", 20));
+        botaoEditar.getStyleClass().add("botao-icone");
+        botaoEditar.setTooltip(new Tooltip("Editar certificado"));
+        botaoEditar.setDisable(true);
+        botaoEditar.setOnAction(evento -> {
+            if (atividadeSelecionada != null) {
+                editarAtividade(atividadeSelecionada);
+            }
+        });
+
+        HBox cabecalho = new HBox(8, tituloPainel, criarEspacador(), botaoEditar, botaoAmpliar);
         cabecalho.setAlignment(Pos.CENTER_LEFT);
 
         visualizadorPreview = new ImageView();
@@ -527,8 +670,10 @@ public class JanelaPrincipal {
     private void processarPastaSelecionada() {
         try {
             Processamento processamento = processadorPasta.processar(pastaSelecionada, classificador);
+            EdicoesManuais.preservar(atividades, processamento.atividades());
             atividades = processamento.atividades();
             atualizarTabela();
+            salvarEstado();
         } catch (IOException erro) {
             mostrarErro("Não foi possível ler a pasta selecionada: " + erro.getMessage());
         }
@@ -563,6 +708,15 @@ public class JanelaPrincipal {
             porCategoria.computeIfAbsent(atividade.getCategoria(), chave -> new ArrayList<>()).add(atividade);
         }
 
+        Map<Categoria, Boolean> expandidoAntes = new EnumMap<>(Categoria.class);
+        if (tabela.getRoot() != null) {
+            for (TreeItem<LinhaTabela> anterior : tabela.getRoot().getChildren()) {
+                if (!anterior.getChildren().isEmpty()) {
+                    expandidoAntes.put(anterior.getValue().getCategoria(), anterior.isExpanded());
+                }
+            }
+        }
+
         TreeItem<LinhaTabela> raizArvore = new TreeItem<>();
         for (ResumoCategoria resumo : resultado.getResumos()) {
             List<Atividade> itens = porCategoria.getOrDefault(resumo.getCategoria(), List.of());
@@ -578,12 +732,16 @@ public class JanelaPrincipal {
             for (Atividade atividade : itens) {
                 itemCategoria.getChildren().add(new TreeItem<>(LinhaTabela.deAtividade(atividade)));
             }
-            itemCategoria.setExpanded(!itens.isEmpty());
+            boolean expandir = !itens.isEmpty()
+                    && (resumo.getCategoria() == categoriaParaExpandir
+                    || expandidoAntes.getOrDefault(resumo.getCategoria(), true));
+            itemCategoria.setExpanded(expandir);
             itemCategoria.expandedProperty().addListener((observavel, antes, depois) -> tabela.refresh());
 
             raizArvore.getChildren().add(itemCategoria);
         }
 
+        categoriaParaExpandir = null;
         tabela.setRoot(raizArvore);
         tabela.refresh();
 
@@ -604,9 +762,137 @@ public class JanelaPrincipal {
         iconeStatusRodape.setManaged(true);
     }
 
+    private static final DateTimeFormatter FORMATO_DATA_EDICAO = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+    private void editarAtividade(Atividade atividade) {
+        Dialog<ButtonType> dialogo = new Dialog<>();
+        dialogo.initOwner(palco);
+        dialogo.setTitle("Editar certificado");
+        dialogo.setHeaderText(atividade.getArquivoNome());
+
+        TextField campoTitulo = new TextField(atividade.getTitulo() == null ? "" : atividade.getTitulo());
+        TextField campoEmissor = new TextField(atividade.getEmissor() == null ? "" : atividade.getEmissor());
+        TextField campoParticipante = new TextField(atividade.getParticipante() == null ? "" : atividade.getParticipante());
+        TextField campoCodigo = new TextField(
+                atividade.getCodigoVerificacao() == null ? "" : atividade.getCodigoVerificacao());
+        TextField campoHoras = new TextField(LinhaTabela.formatarHoras(atividade.getHorasDeclaradas()));
+
+        DatePicker campoData = new DatePicker(atividade.getData());
+        campoData.setEditable(true);
+        campoData.setPromptText("dd/MM/aaaa");
+        campoData.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(LocalDate data) {
+                return data == null ? "" : data.format(FORMATO_DATA_EDICAO);
+            }
+
+            @Override
+            public LocalDate fromString(String texto) {
+                if (texto == null || texto.isBlank()) {
+                    return null;
+                }
+                try {
+                    return LocalDate.parse(texto.trim(), FORMATO_DATA_EDICAO);
+                } catch (DateTimeParseException erro) {
+                    return null;
+                }
+            }
+        });
+
+        ComboBox<Categoria> campoCategoria = new ComboBox<>();
+        campoCategoria.getItems().addAll(Categoria.values());
+        campoCategoria.setValue(atividade.getCategoria());
+
+        for (TextField campo : List.of(campoTitulo, campoEmissor, campoParticipante, campoCodigo)) {
+            campo.setPrefColumnCount(28);
+        }
+
+        GridPane grade = new GridPane();
+        grade.setHgap(12);
+        grade.setVgap(10);
+        grade.setPadding(new Insets(16, 8, 8, 8));
+        grade.addRow(0, new Label("Título"), campoTitulo);
+        grade.addRow(1, new Label("Categoria"), campoCategoria);
+        grade.addRow(2, new Label("Data"), campoData);
+        grade.addRow(3, new Label("Horas"), campoHoras);
+        grade.addRow(4, new Label("Emissor"), campoEmissor);
+        grade.addRow(5, new Label("Participante"), campoParticipante);
+        grade.addRow(6, new Label("Código de verificação"), campoCodigo);
+
+        Label rotuloErro = new Label();
+        rotuloErro.setStyle("-fx-text-fill: #DC2626;");
+        rotuloErro.setManaged(false);
+        rotuloErro.setVisible(false);
+        grade.add(rotuloErro, 0, 7, 2, 1);
+
+        dialogo.getDialogPane().setContent(grade);
+        dialogo.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        ((Button) dialogo.getDialogPane().lookupButton(ButtonType.OK)).setText("Salvar");
+        ((Button) dialogo.getDialogPane().lookupButton(ButtonType.CANCEL)).setText("Cancelar");
+
+        // Valida antes de fechar; se algo estiver errado, o diálogo continua aberto.
+        dialogo.getDialogPane().lookupButton(ButtonType.OK).addEventFilter(javafx.event.ActionEvent.ACTION, evento -> {
+            String erro = null;
+            double horas = 0;
+            try {
+                String textoHoras = campoHoras.getText().trim().replace(',', '.');
+                horas = textoHoras.isEmpty() ? 0 : Double.parseDouble(textoHoras);
+                if (horas < 0) {
+                    erro = "As horas não podem ser negativas.";
+                }
+            } catch (NumberFormatException excecao) {
+                erro = "Horas inválidas. Use um número, como 20 ou 7,5.";
+            }
+
+            String textoData = campoData.getEditor().getText();
+            LocalDate data = campoData.getConverter().fromString(textoData);
+            if (erro == null && textoData != null && !textoData.isBlank() && data == null) {
+                erro = "Data inválida. Use o formato dd/mm/aaaa.";
+            }
+
+            if (erro != null) {
+                rotuloErro.setText(erro);
+                rotuloErro.setManaged(true);
+                rotuloErro.setVisible(true);
+                evento.consume();
+            }
+        });
+
+        if (dialogo.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+            return;
+        }
+
+        String textoHoras = campoHoras.getText().trim().replace(',', '.');
+        atividade.setHorasDeclaradas(textoHoras.isEmpty() ? 0 : Double.parseDouble(textoHoras));
+        atividade.setData(campoData.getConverter().fromString(campoData.getEditor().getText()));
+        atividade.setTitulo(textoOuNulo(campoTitulo.getText()));
+        atividade.setEmissor(textoOuNulo(campoEmissor.getText()));
+        atividade.setParticipante(textoOuNulo(campoParticipante.getText()));
+        atividade.setCodigoVerificacao(textoOuNulo(campoCodigo.getText()));
+
+        Categoria novaCategoria = campoCategoria.getValue();
+        if (novaCategoria != null && novaCategoria != atividade.getCategoria()) {
+            atividade.setCategoria(novaCategoria);
+            atividade.setCategoriaManual(true);
+            categoriaParaExpandir = novaCategoria;
+        }
+
+        atividade.setEditado(true);
+        Validacao.atualizarStatus(atividade);
+
+        atualizarTabela();
+        salvarEstado();
+        selecionarAtividade(atividade);
+    }
+
+    private String textoOuNulo(String texto) {
+        return (texto == null || texto.isBlank()) ? null : texto.trim();
+    }
+
     private void alternarIgnorado(Atividade atividade) {
         atividade.setIgnorado(!atividade.isIgnorado());
         atualizarTabela();
+        salvarEstado();
     }
 
     private void exportarCsv() {
@@ -632,25 +918,6 @@ public class JanelaPrincipal {
         }
     }
 
-    private void abrirCsv() {
-        FileChooser seletor = new FileChooser();
-        seletor.setTitle("Abrir CSV");
-        seletor.getExtensionFilters().add(new FileChooser.ExtensionFilter("Arquivo CSV", "*.csv"));
-
-        java.io.File arquivo = seletor.showOpenDialog(palco);
-        if (arquivo == null) {
-            return;
-        }
-
-        try {
-            atividades = arquivoCsv.abrir(arquivo.toPath());
-            pastaSelecionada = null;
-            atualizarTabela();
-        } catch (IOException erro) {
-            mostrarErro("Não foi possível abrir o CSV: " + erro.getMessage());
-        }
-    }
-
     private void mostrarMensagemPreview(String texto) {
         mensagemPreview.setText(texto);
         boolean visivel = texto != null && !texto.isBlank();
@@ -660,6 +927,7 @@ public class JanelaPrincipal {
 
     private void carregarPreVisualizacao(Atividade atividade) {
         atividadeSelecionada = atividade;
+        botaoEditar.setDisable(false);
         String chave = atividade.getHashSha256();
         Image imagemEmCache = cachePreVisualizacao.get(chave);
         if (imagemEmCache != null) {
@@ -722,6 +990,7 @@ public class JanelaPrincipal {
 
     private void limparPreVisualizacao() {
         atividadeSelecionada = null;
+        botaoEditar.setDisable(true);
         visualizadorPreview.setImage(null);
         mostrarMensagemPreview("Selecione um certificado para ver a pré-visualização");
     }

@@ -41,8 +41,10 @@ mvn test
 2. O programa lê os arquivos e organiza tudo na tabela, agrupado por categoria, com o total de horas de cada uma e o total geral.
 3. Clique em um certificado para ver a pré-visualização da primeira página ao lado.
 4. Dê duplo clique em um item para marcá-lo como ignorado (ele some da soma de horas).
-5. Use **Exportar CSV** para salvar os dados numa planilha, ou **Abrir CSV** para recarregar um arquivo exportado antes.
-6. O botão no canto superior direito alterna entre tema claro e escuro.
+5. Se um certificado caiu na categoria errada, arraste-o para a categoria certa. A mudança fica salva.
+6. Para corrigir título, data, horas ou qualquer outro dado, selecione o certificado e clique em **Editar** (ou use o botão direito do mouse sobre ele).
+7. Use **Exportar CSV** para salvar os dados numa planilha.
+8. O botão no canto superior direito alterna entre tema claro e escuro.
 
 Os certificados de exemplo na pasta [`exemplos/`](exemplos) são **fictícios**, só para teste.
 
@@ -63,7 +65,7 @@ O código é dividido em dois pacotes:
 - `nucleo`: modelo de dados, leitura de PDF, extração de campos, classificação, cálculo de horas, detecção de duplicados e arquivos (CSV e configurações). Não depende do JavaFX, para poder ser testado sem abrir janela.
 - `ui`: interface gráfica em JavaFX.
 
-Os dados de configuração do usuário (categorias e tema) ficam em `~/.atividades-complementares/`, fora do repositório.
+Os dados do usuário (certificados lidos, categorias, tema e última pasta) ficam em `~/.atividades-complementares/`, fora do repositório.
 
 ## Instalação (sem precisar instalar Java)
 

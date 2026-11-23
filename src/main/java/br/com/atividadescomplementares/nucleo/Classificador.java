@@ -13,6 +13,11 @@ import java.util.Properties;
 
 public class Classificador {
 
+    // Ordem em que as categorias são testadas: a primeira que casar vence.
+    // Extensão vem antes de Curso porque declarações de extensão costumam citar o "curso" do aluno.
+    private static final List<Categoria> ORDEM_DE_BUSCA = List.of(
+            Categoria.EXTENSAO, Categoria.PALESTRA, Categoria.CURSO, Categoria.ESTAGIO, Categoria.MONITORIA);
+
     private final Map<Categoria, List<String>> palavrasChave;
 
     public Classificador(Map<Categoria, List<String>> palavrasChave) {
@@ -49,10 +54,7 @@ public class Classificador {
         String textoBusca = ((titulo == null ? "" : titulo) + " " + (textoCompleto == null ? "" : textoCompleto))
                 .toLowerCase();
 
-        for (Categoria categoria : Categoria.values()) {
-            if (categoria == Categoria.OUTROS) {
-                continue;
-            }
+        for (Categoria categoria : ORDEM_DE_BUSCA) {
             List<String> palavras = palavrasChave.get(categoria);
             if (palavras == null) {
                 continue;

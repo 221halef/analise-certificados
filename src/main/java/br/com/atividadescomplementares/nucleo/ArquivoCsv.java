@@ -17,7 +17,7 @@ public class ArquivoCsv {
 
     private static final char SEPARADOR = ';';
     private static final String CABECALHO =
-            "arquivo;hash;titulo;categoria;emissor;data;horas;status;codigo_verificacao;participante;ignorado";
+            "arquivo;hash;titulo;categoria;emissor;data;horas;status;codigo_verificacao;participante;ignorado;caminho;observacao;categoria_manual;editado";
     private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     public void exportar(List<Atividade> atividades, Path destino) throws IOException {
@@ -46,6 +46,10 @@ public class ArquivoCsv {
         campos.add(atividade.getCodigoVerificacao());
         campos.add(atividade.getParticipante());
         campos.add(atividade.isIgnorado() ? "sim" : "não");
+        campos.add(atividade.getCaminhoArquivo() == null ? "" : atividade.getCaminhoArquivo().toString());
+        campos.add(atividade.getObservacao());
+        campos.add(atividade.isCategoriaManual() ? "sim" : "não");
+        campos.add(atividade.isEditado() ? "sim" : "não");
 
         StringBuilder linha = new StringBuilder();
         for (int i = 0; i < campos.size(); i++) {
@@ -146,7 +150,17 @@ public class ArquivoCsv {
         String textoIgnorado = valorDaColuna(campos, indices, "ignorado");
         boolean ignorado = textoIgnorado.equalsIgnoreCase("sim") || textoIgnorado.equalsIgnoreCase("true");
 
-        Atividade atividade = new Atividade(arquivoNome, Path.of(arquivoNome), hash);
+        String caminho = valorDaColuna(campos, indices, "caminho");
+        String observacao = valorDaColuna(campos, indices, "observacao");
+        String textoManual = valorDaColuna(campos, indices, "categoria_manual");
+        boolean categoriaManual = textoManual.equalsIgnoreCase("sim") || textoManual.equalsIgnoreCase("true");
+        String textoEditado = valorDaColuna(campos, indices, "editado");
+        boolean editado = textoEditado.equalsIgnoreCase("sim") || textoEditado.equalsIgnoreCase("true");
+
+        Atividade atividade = new Atividade(arquivoNome, interpretarCaminho(caminho, arquivoNome), hash);
+        atividade.setObservacao(observacao == null ? "" : observacao);
+        atividade.setCategoriaManual(categoriaManual);
+        atividade.setEditado(editado);
         atividade.setTitulo(tratarVazio(titulo));
         atividade.setCategoria(categoria);
         atividade.setEmissor(tratarVazio(emissor));
@@ -158,6 +172,15 @@ public class ArquivoCsv {
         atividade.setIgnorado(ignorado);
 
         return atividade;
+    }
+
+    private Path interpretarCaminho(String caminho, String arquivoNome) {
+        String texto = (caminho == null || caminho.isBlank()) ? arquivoNome : caminho;
+        try {
+            return Path.of(texto);
+        } catch (java.nio.file.InvalidPathException erro) {
+            return Path.of(arquivoNome);
+        }
     }
 
     private String tratarVazio(String texto) {

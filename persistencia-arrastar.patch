@@ -1,0 +1,1205 @@
+diff --git a/README.md b/README.md
+index 2a49349..fc08628 100644
+--- a/README.md
++++ b/README.md
+@@ -41,8 +41,10 @@ mvn test
+ 2. O programa lê os arquivos e organiza tudo na tabela, agrupado por categoria, com o total de horas de cada uma e o total geral.
+ 3. Clique em um certificado para ver a pré-visualização da primeira página ao lado.
+ 4. Dê duplo clique em um item para marcá-lo como ignorado (ele some da soma de horas).
+-5. Use **Exportar CSV** para salvar os dados numa planilha, ou **Abrir CSV** para recarregar um arquivo exportado antes.
+-6. O botão no canto superior direito alterna entre tema claro e escuro.
++5. Se um certificado caiu na categoria errada, arraste-o para a categoria certa. A mudança fica salva.
++6. Para corrigir título, data, horas ou qualquer outro dado, selecione o certificado e clique em **Editar** (ou use o botão direito do mouse sobre ele).
++7. Use **Exportar CSV** para salvar os dados numa planilha.
++8. O botão no canto superior direito alterna entre tema claro e escuro.
+ 
+ Os certificados de exemplo na pasta [`exemplos/`](exemplos) são **fictícios**, só para teste.
+ 
+@@ -63,7 +65,7 @@ O código é dividido em dois pacotes:
+ - `nucleo`: modelo de dados, leitura de PDF, extração de campos, classificação, cálculo de horas, detecção de duplicados e arquivos (CSV e configurações). Não depende do JavaFX, para poder ser testado sem abrir janela.
+ - `ui`: interface gráfica em JavaFX.
+ 
+-Os dados de configuração do usuário (categorias e tema) ficam em `~/.atividades-complementares/`, fora do repositório.
++Os dados do usuário (certificados lidos, categorias, tema e última pasta) ficam em `~/.atividades-complementares/`, fora do repositório.
+ 
+ ## Instalação (sem precisar instalar Java)
+ 
+diff --git a/src/main/java/br/com/atividadescomplementares/nucleo/ArmazenamentoAtividades.java b/src/main/java/br/com/atividadescomplementares/nucleo/ArmazenamentoAtividades.java
+new file mode 100644
+index 0000000..d85c14c
+--- /dev/null
++++ b/src/main/java/br/com/atividadescomplementares/nucleo/ArmazenamentoAtividades.java
+@@ -0,0 +1,32 @@
++package br.com.atividadescomplementares.nucleo;
++
++import java.io.IOException;
++import java.nio.file.AtomicMoveNotSupportedException;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.nio.file.StandardCopyOption;
++import java.util.ArrayList;
++import java.util.List;
++
++/** Guarda a lista de atividades em disco para que ela volte na próxima vez que o programa abrir. */
++public class ArmazenamentoAtividades {
++
++    private final ArquivoCsv arquivoCsv = new ArquivoCsv();
++
++    public void salvar(List<Atividade> atividades, Path destino) throws IOException {
++        Path temporario = destino.resolveSibling(destino.getFileName() + ".tmp");
++        arquivoCsv.exportar(atividades, temporario);
++        try {
++            Files.move(temporario, destino, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
++        } catch (AtomicMoveNotSupportedException erro) {
++            Files.move(temporario, destino, StandardCopyOption.REPLACE_EXISTING);
++        }
++    }
++
++    public List<Atividade> carregar(Path origem) throws IOException {
++        if (!Files.exists(origem)) {
++            return new ArrayList<>();
++        }
++        return arquivoCsv.abrir(origem);
++    }
++}
+diff --git a/src/main/java/br/com/atividadescomplementares/nucleo/ArquivoConfig.java b/src/main/java/br/com/atividadescomplementares/nucleo/ArquivoConfig.java
+index 09bfc0e..74b0bf5 100644
+--- a/src/main/java/br/com/atividadescomplementares/nucleo/ArquivoConfig.java
++++ b/src/main/java/br/com/atividadescomplementares/nucleo/ArquivoConfig.java
+@@ -10,20 +10,54 @@ import java.util.Properties;
+ 
+ public class ArquivoConfig {
+ 
++    private static final String CHAVE_TEMA = "tema";
++    private static final String CHAVE_PASTA = "pasta";
++
+     public String lerTema(Path arquivo) throws IOException {
++        return carregar(arquivo).getProperty(CHAVE_TEMA, "claro");
++    }
++
++    public void salvarTema(String tema, Path arquivo) throws IOException {
++        Properties propriedades = carregar(arquivo);
++        propriedades.setProperty(CHAVE_TEMA, tema);
++        gravar(propriedades, arquivo);
++    }
++
++    public Path lerPasta(Path arquivo) throws IOException {
++        String valor = carregar(arquivo).getProperty(CHAVE_PASTA, "");
++        if (valor.isBlank()) {
++            return null;
++        }
++        try {
++            return Path.of(valor);
++        } catch (java.nio.file.InvalidPathException erro) {
++            return null;
++        }
++    }
++
++    public void salvarPasta(Path pasta, Path arquivo) throws IOException {
++        Properties propriedades = carregar(arquivo);
++        if (pasta == null) {
++            propriedades.remove(CHAVE_PASTA);
++        } else {
++            propriedades.setProperty(CHAVE_PASTA, pasta.toString());
++        }
++        gravar(propriedades, arquivo);
++    }
++
++    private Properties carregar(Path arquivo) throws IOException {
+         Properties propriedades = new Properties();
+         if (Files.exists(arquivo)) {
+             try (BufferedReader leitor = Files.newBufferedReader(arquivo, StandardCharsets.UTF_8)) {
+                 propriedades.load(leitor);
+             }
+         }
+-        return propriedades.getProperty("tema", "claro");
++        return propriedades;
+     }
+ 
+-    public void salvarTema(String tema, Path arquivo) throws IOException {
++    private void gravar(Properties propriedades, Path arquivo) throws IOException {
+         try (BufferedWriter escritor = Files.newBufferedWriter(arquivo, StandardCharsets.UTF_8)) {
+-            escritor.write("tema=" + tema);
+-            escritor.newLine();
++            propriedades.store(escritor, null);
+         }
+     }
+ }
+diff --git a/src/main/java/br/com/atividadescomplementares/nucleo/ArquivoCsv.java b/src/main/java/br/com/atividadescomplementares/nucleo/ArquivoCsv.java
+index 23e3b6a..6161740 100644
+--- a/src/main/java/br/com/atividadescomplementares/nucleo/ArquivoCsv.java
++++ b/src/main/java/br/com/atividadescomplementares/nucleo/ArquivoCsv.java
+@@ -17,7 +17,7 @@ public class ArquivoCsv {
+ 
+     private static final char SEPARADOR = ';';
+     private static final String CABECALHO =
+-            "arquivo;hash;titulo;categoria;emissor;data;horas;status;codigo_verificacao;participante;ignorado";
++            "arquivo;hash;titulo;categoria;emissor;data;horas;status;codigo_verificacao;participante;ignorado;caminho;observacao;categoria_manual;editado";
+     private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+ 
+     public void exportar(List<Atividade> atividades, Path destino) throws IOException {
+@@ -46,6 +46,10 @@ public class ArquivoCsv {
+         campos.add(atividade.getCodigoVerificacao());
+         campos.add(atividade.getParticipante());
+         campos.add(atividade.isIgnorado() ? "sim" : "não");
++        campos.add(atividade.getCaminhoArquivo() == null ? "" : atividade.getCaminhoArquivo().toString());
++        campos.add(atividade.getObservacao());
++        campos.add(atividade.isCategoriaManual() ? "sim" : "não");
++        campos.add(atividade.isEditado() ? "sim" : "não");
+ 
+         StringBuilder linha = new StringBuilder();
+         for (int i = 0; i < campos.size(); i++) {
+@@ -146,7 +150,17 @@ public class ArquivoCsv {
+         String textoIgnorado = valorDaColuna(campos, indices, "ignorado");
+         boolean ignorado = textoIgnorado.equalsIgnoreCase("sim") || textoIgnorado.equalsIgnoreCase("true");
+ 
+-        Atividade atividade = new Atividade(arquivoNome, Path.of(arquivoNome), hash);
++        String caminho = valorDaColuna(campos, indices, "caminho");
++        String observacao = valorDaColuna(campos, indices, "observacao");
++        String textoManual = valorDaColuna(campos, indices, "categoria_manual");
++        boolean categoriaManual = textoManual.equalsIgnoreCase("sim") || textoManual.equalsIgnoreCase("true");
++        String textoEditado = valorDaColuna(campos, indices, "editado");
++        boolean editado = textoEditado.equalsIgnoreCase("sim") || textoEditado.equalsIgnoreCase("true");
++
++        Atividade atividade = new Atividade(arquivoNome, interpretarCaminho(caminho, arquivoNome), hash);
++        atividade.setObservacao(observacao == null ? "" : observacao);
++        atividade.setCategoriaManual(categoriaManual);
++        atividade.setEditado(editado);
+         atividade.setTitulo(tratarVazio(titulo));
+         atividade.setCategoria(categoria);
+         atividade.setEmissor(tratarVazio(emissor));
+@@ -160,6 +174,15 @@ public class ArquivoCsv {
+         return atividade;
+     }
+ 
++    private Path interpretarCaminho(String caminho, String arquivoNome) {
++        String texto = (caminho == null || caminho.isBlank()) ? arquivoNome : caminho;
++        try {
++            return Path.of(texto);
++        } catch (java.nio.file.InvalidPathException erro) {
++            return Path.of(arquivoNome);
++        }
++    }
++
+     private String tratarVazio(String texto) {
+         return (texto == null || texto.isBlank()) ? null : texto;
+     }
+diff --git a/src/main/java/br/com/atividadescomplementares/nucleo/Atividade.java b/src/main/java/br/com/atividadescomplementares/nucleo/Atividade.java
+index 745bed0..ae91d53 100644
+--- a/src/main/java/br/com/atividadescomplementares/nucleo/Atividade.java
++++ b/src/main/java/br/com/atividadescomplementares/nucleo/Atividade.java
+@@ -19,6 +19,8 @@ public class Atividade {
+     private Status status;
+     private String observacao;
+     private boolean ignorado;
++    private boolean categoriaManual;
++    private boolean editado;
+ 
+     public Atividade(String arquivoNome, Path caminhoArquivo, String hashSha256) {
+         this.arquivoNome = arquivoNome;
+@@ -130,6 +132,22 @@ public class Atividade {
+         this.ignorado = ignorado;
+     }
+ 
++    public boolean isCategoriaManual() {
++        return categoriaManual;
++    }
++
++    public void setCategoriaManual(boolean categoriaManual) {
++        this.categoriaManual = categoriaManual;
++    }
++
++    public boolean isEditado() {
++        return editado;
++    }
++
++    public void setEditado(boolean editado) {
++        this.editado = editado;
++    }
++
+     public boolean contaNaSoma() {
+         return !ignorado && status != Status.DUPLICADO;
+     }
+diff --git a/src/main/java/br/com/atividadescomplementares/nucleo/Classificador.java b/src/main/java/br/com/atividadescomplementares/nucleo/Classificador.java
+index 4f93499..f3fa69e 100644
+--- a/src/main/java/br/com/atividadescomplementares/nucleo/Classificador.java
++++ b/src/main/java/br/com/atividadescomplementares/nucleo/Classificador.java
+@@ -13,6 +13,11 @@ import java.util.Properties;
+ 
+ public class Classificador {
+ 
++    // Ordem em que as categorias são testadas: a primeira que casar vence.
++    // Extensão vem antes de Curso porque declarações de extensão costumam citar o "curso" do aluno.
++    private static final List<Categoria> ORDEM_DE_BUSCA = List.of(
++            Categoria.EXTENSAO, Categoria.PALESTRA, Categoria.CURSO, Categoria.ESTAGIO, Categoria.MONITORIA);
++
+     private final Map<Categoria, List<String>> palavrasChave;
+ 
+     public Classificador(Map<Categoria, List<String>> palavrasChave) {
+@@ -49,10 +54,7 @@ public class Classificador {
+         String textoBusca = ((titulo == null ? "" : titulo) + " " + (textoCompleto == null ? "" : textoCompleto))
+                 .toLowerCase();
+ 
+-        for (Categoria categoria : Categoria.values()) {
+-            if (categoria == Categoria.OUTROS) {
+-                continue;
+-            }
++        for (Categoria categoria : ORDEM_DE_BUSCA) {
+             List<String> palavras = palavrasChave.get(categoria);
+             if (palavras == null) {
+                 continue;
+diff --git a/src/main/java/br/com/atividadescomplementares/nucleo/EdicoesManuais.java b/src/main/java/br/com/atividadescomplementares/nucleo/EdicoesManuais.java
+new file mode 100644
+index 0000000..21864d5
+--- /dev/null
++++ b/src/main/java/br/com/atividadescomplementares/nucleo/EdicoesManuais.java
+@@ -0,0 +1,49 @@
++package br.com.atividadescomplementares.nucleo;
++
++import java.nio.file.Path;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++
++/** Mantém as escolhas do usuário (categoria arrastada, item ignorado) quando a pasta é lida de novo. */
++public final class EdicoesManuais {
++
++    private EdicoesManuais() {
++    }
++
++    public static void preservar(List<Atividade> antigas, List<Atividade> novas) {
++        Map<Path, Atividade> porCaminho = new HashMap<>();
++        for (Atividade antiga : antigas) {
++            if (antiga.getCaminhoArquivo() != null) {
++                porCaminho.put(antiga.getCaminhoArquivo().toAbsolutePath().normalize(), antiga);
++            }
++        }
++
++        for (Atividade nova : novas) {
++            if (nova.getCaminhoArquivo() == null) {
++                continue;
++            }
++            Atividade antiga = porCaminho.get(nova.getCaminhoArquivo().toAbsolutePath().normalize());
++            if (antiga == null) {
++                continue;
++            }
++            if (antiga.isCategoriaManual()) {
++                nova.setCategoria(antiga.getCategoria());
++                nova.setCategoriaManual(true);
++            }
++            nova.setIgnorado(antiga.isIgnorado());
++            if (antiga.isEditado()) {
++                nova.setTitulo(antiga.getTitulo());
++                nova.setEmissor(antiga.getEmissor());
++                nova.setData(antiga.getData());
++                nova.setHorasDeclaradas(antiga.getHorasDeclaradas());
++                nova.setCodigoVerificacao(antiga.getCodigoVerificacao());
++                nova.setParticipante(antiga.getParticipante());
++                nova.setEditado(true);
++            }
++            if (antiga.isEditado() || antiga.isCategoriaManual()) {
++                Validacao.atualizarStatus(nova);
++            }
++        }
++    }
++}
+diff --git a/src/main/java/br/com/atividadescomplementares/nucleo/ExtratorCampos.java b/src/main/java/br/com/atividadescomplementares/nucleo/ExtratorCampos.java
+index 0cad6c3..530fb3d 100644
+--- a/src/main/java/br/com/atividadescomplementares/nucleo/ExtratorCampos.java
++++ b/src/main/java/br/com/atividadescomplementares/nucleo/ExtratorCampos.java
+@@ -33,6 +33,8 @@ public class ExtratorCampos {
+             Pattern.compile("carga\\s+hor[aá]ria\\s*[:\\-]?\\s*(\\d+[.,]?\\d*)\\s*h(?:oras?)?\\b", Pattern.CASE_INSENSITIVE),
+             Pattern.compile("\\bCH\\s*[:\\-]?\\s*(\\d+[.,]?\\d*)", Pattern.CASE_INSENSITIVE),
+             Pattern.compile("dura[cç][aã]o\\s*[:\\-]?\\s*de?\\s*(\\d+[.,]?\\d*)\\s*horas?", Pattern.CASE_INSENSITIVE),
++            Pattern.compile("(?:workload|duration|total\\s+hours|hours)\\s*[:\\-]?\\s*(?:of\\s+)?(\\d+[.,]?\\d*)", Pattern.CASE_INSENSITIVE),
++            Pattern.compile("(\\d+[.,]?\\d*)[\\s\\-]*hours?\\b", Pattern.CASE_INSENSITIVE),
+             Pattern.compile("(\\d+[.,]?\\d*)\\s*horas?\\b", Pattern.CASE_INSENSITIVE),
+             Pattern.compile("(\\d+[.,]?\\d*)\\s*h\\b", Pattern.CASE_INSENSITIVE)
+     };
+@@ -54,7 +56,7 @@ public class ExtratorCampos {
+     private static final Pattern[] PADROES_TITULO = {
+             Pattern.compile("[\"“]([^\"”]+)[\"”]"),
+             Pattern.compile(
+-                    "(?:curso|palestra|minicurso|oficina|workshop|programa\\s+de\\s+extens[aã]o|projeto\\s+de\\s+extens[aã]o|est[aá]gio|monitoria)\\s+(?:de|em|no\\s+curso\\s+de)?\\s*([^,;.\"”]+)",
++                    "(?:course|curso|palestra|minicurso|oficina|workshop|programa\\s+de\\s+extens[aã]o|projeto\\s+de\\s+extens[aã]o|est[aá]gio|monitoria)\\s+(?:(?:de|em|of|in|on|no\\s+curso\\s+de)\\b)?\\s*([^,;.\"”]+)",
+                     Pattern.CASE_INSENSITIVE)
+     };
+ 
+diff --git a/src/main/java/br/com/atividadescomplementares/nucleo/ProcessadorPasta.java b/src/main/java/br/com/atividadescomplementares/nucleo/ProcessadorPasta.java
+index 86a2785..2ebf5ab 100644
+--- a/src/main/java/br/com/atividadescomplementares/nucleo/ProcessadorPasta.java
++++ b/src/main/java/br/com/atividadescomplementares/nucleo/ProcessadorPasta.java
+@@ -63,10 +63,7 @@ public class ProcessadorPasta {
+         Categoria categoria = classificador.classificar(campos.titulo(), textoExtraido.texto());
+         atividade.setCategoria(categoria);
+ 
+-        if (!campos.camposFaltando().isEmpty()) {
+-            atividade.setStatus(Status.REVISAR);
+-            atividade.setObservacao("campos faltando: " + String.join(", ", campos.camposFaltando()));
+-        }
++        Validacao.atualizarStatus(atividade);
+ 
+         return atividade;
+     }
+diff --git a/src/main/java/br/com/atividadescomplementares/nucleo/Validacao.java b/src/main/java/br/com/atividadescomplementares/nucleo/Validacao.java
+new file mode 100644
+index 0000000..91e6b34
+--- /dev/null
++++ b/src/main/java/br/com/atividadescomplementares/nucleo/Validacao.java
+@@ -0,0 +1,65 @@
++package br.com.atividadescomplementares.nucleo;
++
++import java.util.ArrayList;
++import java.util.List;
++
++/**
++ * Regra de validação: um certificado só é "válido" quando título, categoria, data e horas estão preenchidos.
++ * Emissor, participante e código de verificação são opcionais.
++ */
++public final class Validacao {
++
++    private static final String PREFIXO_CAMPOS_FALTANDO = "campos faltando";
++    private static final String SEM_TEXTO = "sem texto extraível";
++
++    private Validacao() {
++    }
++
++    public static List<String> camposObrigatoriosFaltando(Atividade atividade) {
++        List<String> faltando = new ArrayList<>();
++        if (atividade.getTitulo() == null || atividade.getTitulo().isBlank()) {
++            faltando.add("título");
++        }
++        if (atividade.getCategoria() == null || atividade.getCategoria() == Categoria.OUTROS) {
++            faltando.add("categoria");
++        }
++        if (atividade.getData() == null) {
++            faltando.add("data");
++        }
++        if (atividade.getHorasDeclaradas() <= 0) {
++            faltando.add("horas");
++        }
++        return faltando;
++    }
++
++    /** Recalcula o status entre "válida" e "revisar". Duplicados não são alterados. */
++    public static void atualizarStatus(Atividade atividade) {
++        if (atividade.getStatus() == Status.DUPLICADO || atividade.getStatus() == Status.POSSIVEL_DUPLICADO) {
++            return;
++        }
++
++        List<String> faltando = camposObrigatoriosFaltando(atividade);
++
++        List<String> observacoes = new ArrayList<>();
++        String atual = atividade.getObservacao();
++        if (atual != null && !atual.isBlank()) {
++            for (String parte : atual.split("; ")) {
++                if (parte.startsWith(PREFIXO_CAMPOS_FALTANDO)) {
++                    continue;
++                }
++                if (parte.equals(SEM_TEXTO) && faltando.isEmpty()) {
++                    continue;
++                }
++                observacoes.add(parte);
++            }
++        }
++
++        if (faltando.isEmpty()) {
++            atividade.setStatus(Status.OK);
++        } else {
++            atividade.setStatus(Status.REVISAR);
++            observacoes.add(PREFIXO_CAMPOS_FALTANDO + ": " + String.join(", ", faltando));
++        }
++        atividade.setObservacao(String.join("; ", observacoes));
++    }
++}
+diff --git a/src/main/java/br/com/atividadescomplementares/ui/Icones.java b/src/main/java/br/com/atividadescomplementares/ui/Icones.java
+index e02cabb..2c0096b 100644
+--- a/src/main/java/br/com/atividadescomplementares/ui/Icones.java
++++ b/src/main/java/br/com/atividadescomplementares/ui/Icones.java
+@@ -16,6 +16,7 @@ public final class Icones {
+             Map.entry("baixar", "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"),
+             Map.entry("atualizar", "M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0 0 20.49 15"),
+             Map.entry("ampliar", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6 M15 3h6v6 M10 14L21 3"),
++            Map.entry("editar", "M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z M15 5l4 4"),
+             Map.entry("lua", "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"),
+             Map.entry("sol", "M17 12A5 5 0 1 1 7 12A5 5 0 1 1 17 12 M12 1v2 M12 21v2 M4.22 4.22l1.42 1.42 M18.36 18.36l1.42 1.42 M1 12h2 M21 12h2 M4.22 19.78l1.42-1.42 M18.36 5.64l1.42-1.42"),
+             Map.entry("seta-baixo", "M6 9l6 6 6-6"),
+diff --git a/src/main/java/br/com/atividadescomplementares/ui/JanelaPrincipal.java b/src/main/java/br/com/atividadescomplementares/ui/JanelaPrincipal.java
+index 54163cc..0476bdd 100644
+--- a/src/main/java/br/com/atividadescomplementares/ui/JanelaPrincipal.java
++++ b/src/main/java/br/com/atividadescomplementares/ui/JanelaPrincipal.java
+@@ -2,17 +2,20 @@ package br.com.atividadescomplementares.ui;
+ 
+ import atlantafx.base.theme.PrimerDark;
+ import atlantafx.base.theme.PrimerLight;
++import br.com.atividadescomplementares.nucleo.ArmazenamentoAtividades;
+ import br.com.atividadescomplementares.nucleo.ArquivoConfig;
+ import br.com.atividadescomplementares.nucleo.ArquivoCsv;
+ import br.com.atividadescomplementares.nucleo.Atividade;
+ import br.com.atividadescomplementares.nucleo.Categoria;
+ import br.com.atividadescomplementares.nucleo.Classificador;
++import br.com.atividadescomplementares.nucleo.EdicoesManuais;
+ import br.com.atividadescomplementares.nucleo.PastaDados;
+ import br.com.atividadescomplementares.nucleo.Processamento;
+ import br.com.atividadescomplementares.nucleo.ProcessadorPasta;
+ import br.com.atividadescomplementares.nucleo.ResultadoCalculo;
+ import br.com.atividadescomplementares.nucleo.ResumoCategoria;
+ import br.com.atividadescomplementares.nucleo.Status;
++import br.com.atividadescomplementares.nucleo.Validacao;
+ import javafx.application.Application;
+ import javafx.application.Platform;
+ import javafx.beans.property.SimpleStringProperty;
+@@ -23,6 +26,13 @@ import javafx.scene.Cursor;
+ import javafx.scene.Scene;
+ import javafx.scene.control.Alert;
+ import javafx.scene.control.Button;
++import javafx.scene.control.ButtonType;
++import javafx.scene.control.ComboBox;
++import javafx.scene.control.ContextMenu;
++import javafx.scene.control.DatePicker;
++import javafx.scene.control.Dialog;
++import javafx.scene.control.MenuItem;
++import javafx.scene.control.TextField;
+ import javafx.scene.control.Label;
+ import javafx.scene.control.Tooltip;
+ import javafx.scene.control.TreeItem;
+@@ -32,9 +42,13 @@ import javafx.scene.control.TreeTableRow;
+ import javafx.scene.control.TreeTableView;
+ import javafx.scene.image.Image;
+ import javafx.scene.image.ImageView;
++import javafx.scene.input.ClipboardContent;
++import javafx.scene.input.Dragboard;
+ import javafx.scene.input.MouseButton;
++import javafx.scene.input.TransferMode;
+ import javafx.scene.layout.BorderPane;
+ import javafx.scene.layout.FlowPane;
++import javafx.scene.layout.GridPane;
+ import javafx.scene.layout.HBox;
+ import javafx.scene.layout.Priority;
+ import javafx.scene.layout.Region;
+@@ -46,6 +60,7 @@ import javafx.stage.DirectoryChooser;
+ import javafx.stage.FileChooser;
+ import javafx.stage.Modality;
+ import javafx.stage.Stage;
++import javafx.util.StringConverter;
+ import org.apache.pdfbox.Loader;
+ import org.apache.pdfbox.pdmodel.PDDocument;
+ import org.apache.pdfbox.rendering.PDFRenderer;
+@@ -55,6 +70,9 @@ import java.io.ByteArrayOutputStream;
+ import java.io.IOException;
+ import java.nio.file.Files;
+ import java.nio.file.Path;
++import java.time.LocalDate;
++import java.time.format.DateTimeFormatter;
++import java.time.format.DateTimeParseException;
+ import java.util.ArrayList;
+ import java.util.EnumMap;
+ import java.util.HashMap;
+@@ -66,6 +84,7 @@ public class JanelaPrincipal {
+ 
+     private static final String NOME_ARQUIVO_CATEGORIAS = "categorias.properties";
+     private static final String NOME_ARQUIVO_CONFIG = "config.properties";
++    private static final String NOME_ARQUIVO_ATIVIDADES = "atividades.csv";
+ 
+     private static final double LARGURA_COLUNA_DATA = 120;
+     private static final double LARGURA_COLUNA_HORAS = 110;
+@@ -77,6 +96,7 @@ public class JanelaPrincipal {
+     private final ProcessadorPasta processadorPasta = new ProcessadorPasta();
+     private final ArquivoConfig arquivoConfig = new ArquivoConfig();
+     private final ArquivoCsv arquivoCsv = new ArquivoCsv();
++    private final ArmazenamentoAtividades armazenamento = new ArmazenamentoAtividades();
+ 
+     private final Map<String, Image> cachePreVisualizacao = new HashMap<>();
+ 
+@@ -87,6 +107,8 @@ public class JanelaPrincipal {
+     private List<Atividade> atividades = new ArrayList<>();
+     private Classificador classificador;
+     private Atividade atividadeSelecionada;
++    private Atividade atividadeArrastada;
++    private Categoria categoriaParaExpandir;
+ 
+     private Label rotuloTotalHoras;
+     private FlowPane legendaCategorias;
+@@ -95,6 +117,7 @@ public class JanelaPrincipal {
+     private TreeTableView<LinhaTabela> tabela;
+     private ImageView visualizadorPreview;
+     private Label mensagemPreview;
++    private Button botaoEditar;
+ 
+     public void iniciar(Stage palcoPrincipal) {
+         this.palco = palcoPrincipal;
+@@ -132,6 +155,25 @@ public class JanelaPrincipal {
+ 
+         Path caminhoConfig = pastaDados.obterPasta().resolve(NOME_ARQUIVO_CONFIG);
+         temaAtual = arquivoConfig.lerTema(caminhoConfig);
++        pastaSelecionada = arquivoConfig.lerPasta(caminhoConfig);
++
++        try {
++            atividades = armazenamento.carregar(pastaDados.obterPasta().resolve(NOME_ARQUIVO_ATIVIDADES));
++            atividades.forEach(Validacao::atualizarStatus);
++        } catch (IOException erro) {
++            atividades = new ArrayList<>();
++            mostrarErro("Não foi possível carregar os certificados salvos: " + erro.getMessage());
++        }
++    }
++
++    private void salvarEstado() {
++        try {
++            Path pasta = pastaDados.obterPasta();
++            armazenamento.salvar(atividades, pasta.resolve(NOME_ARQUIVO_ATIVIDADES));
++            arquivoConfig.salvarPasta(pastaSelecionada, pasta.resolve(NOME_ARQUIVO_CONFIG));
++        } catch (IOException erro) {
++            mostrarErro("Não foi possível salvar os certificados: " + erro.getMessage());
++        }
+     }
+ 
+     private Button criarBotao(String texto, String icone, String classeEstilo) {
+@@ -158,12 +200,9 @@ public class JanelaPrincipal {
+         Button botaoPasta = criarBotao("Pasta", "pasta", "botao-secundario");
+         botaoPasta.setOnAction(evento -> escolherPasta());
+ 
+-        Button botaoAbrirCsv = criarBotao("Abrir CSV", "arquivo", "botao-secundario");
+-        botaoAbrirCsv.setOnAction(evento -> abrirCsv());
+-
+         InterruptorTema interruptor = new InterruptorTema(temaAtual.equals("escuro"), this::alternarTema);
+ 
+-        HBox barra = new HBox(12, grupoTitulo, criarEspacador(), botaoPasta, botaoAbrirCsv, interruptor);
++        HBox barra = new HBox(12, grupoTitulo, criarEspacador(), botaoPasta, interruptor);
+         barra.setPadding(new Insets(16, 24, 16, 24));
+         barra.setAlignment(Pos.CENTER_LEFT);
+         barra.getStyleClass().add("barra-superior");
+@@ -291,6 +330,15 @@ public class JanelaPrincipal {
+                     alternarIgnorado(linha.getItem().getAtividade());
+                 }
+             });
++            configurarArrastar(linha);
++
++            MenuItem itemEditar = new MenuItem("Editar...");
++            itemEditar.setOnAction(evento -> editarAtividade(linha.getItem().getAtividade()));
++            MenuItem itemIgnorar = new MenuItem("Ignorar / considerar na soma");
++            itemIgnorar.setOnAction(evento -> alternarIgnorado(linha.getItem().getAtividade()));
++            ContextMenu menuContexto = new ContextMenu(itemEditar, itemIgnorar);
++            linha.itemProperty().addListener((observavel, antigo, novo) ->
++                    linha.setContextMenu(novo == null || novo.isEhCategoria() ? null : menuContexto));
+             return linha;
+         });
+ 
+@@ -305,6 +353,85 @@ public class JanelaPrincipal {
+         return arvore;
+     }
+ 
++    private static final String CLASSE_ALVO_DROP = "linha-alvo-drop";
++
++    private void configurarArrastar(TreeTableRow<LinhaTabela> linha) {
++        linha.setOnDragDetected(evento -> {
++            LinhaTabela item = linha.getItem();
++            if (item == null || item.isEhCategoria()) {
++                return;
++            }
++            Dragboard quadro = linha.startDragAndDrop(TransferMode.MOVE);
++            ClipboardContent conteudo = new ClipboardContent();
++            conteudo.putString(item.getAtividade().getArquivoNome());
++            quadro.setContent(conteudo);
++            atividadeArrastada = item.getAtividade();
++            evento.consume();
++        });
++
++        linha.setOnDragOver(evento -> {
++            if (podeSoltarEm(linha.getItem())) {
++                evento.acceptTransferModes(TransferMode.MOVE);
++            }
++            evento.consume();
++        });
++
++        linha.setOnDragEntered(evento -> {
++            if (podeSoltarEm(linha.getItem()) && !linha.getStyleClass().contains(CLASSE_ALVO_DROP)) {
++                linha.getStyleClass().add(CLASSE_ALVO_DROP);
++            }
++        });
++
++        linha.setOnDragExited(evento -> linha.getStyleClass().remove(CLASSE_ALVO_DROP));
++
++        linha.setOnDragDropped(evento -> {
++            linha.getStyleClass().remove(CLASSE_ALVO_DROP);
++            boolean sucesso = false;
++            LinhaTabela alvo = linha.getItem();
++            if (podeSoltarEm(alvo)) {
++                Atividade movida = atividadeArrastada;
++                Categoria destino = alvo.getCategoria();
++                sucesso = true;
++                Platform.runLater(() -> moverParaCategoria(movida, destino));
++            }
++            evento.setDropCompleted(sucesso);
++            evento.consume();
++        });
++
++        linha.setOnDragDone(evento -> atividadeArrastada = null);
++    }
++
++    private boolean podeSoltarEm(LinhaTabela alvo) {
++        return atividadeArrastada != null
++                && alvo != null
++                && alvo.getCategoria() != atividadeArrastada.getCategoria();
++    }
++
++    private void moverParaCategoria(Atividade atividade, Categoria destino) {
++        atividade.setCategoria(destino);
++        atividade.setCategoriaManual(true);
++        categoriaParaExpandir = destino;
++        Validacao.atualizarStatus(atividade);
++        atualizarTabela();
++        salvarEstado();
++        selecionarAtividade(atividade);
++    }
++
++    private void selecionarAtividade(Atividade atividade) {
++        TreeItem<LinhaTabela> raizArvore = tabela.getRoot();
++        if (raizArvore == null) {
++            return;
++        }
++        for (TreeItem<LinhaTabela> itemCategoria : raizArvore.getChildren()) {
++            for (TreeItem<LinhaTabela> itemAtividade : itemCategoria.getChildren()) {
++                if (itemAtividade.getValue().getAtividade() == atividade) {
++                    tabela.getSelectionModel().select(itemAtividade);
++                    return;
++                }
++            }
++        }
++    }
++
+     private TreeTableCell<LinhaTabela, String> criarCelulaTitulo() {
+         return new TreeTableCell<>() {
+             private final HBox caixa = new HBox(10);
+@@ -414,7 +541,12 @@ public class JanelaPrincipal {
+                         caixa.getChildren().add(seta);
+                     }
+                 } else {
+-                    caixa.getChildren().add(criarSelo(valor, linha.getEstiloStatus()));
++                    Label selo = criarSelo(valor, linha.getEstiloStatus());
++                    String observacao = linha.getAtividade().getObservacao();
++                    if (observacao != null && !observacao.isBlank()) {
++                        selo.setTooltip(new Tooltip(observacao));
++                    }
++                    caixa.getChildren().add(selo);
+                 }
+ 
+                 setGraphic(caixa);
+@@ -441,7 +573,18 @@ public class JanelaPrincipal {
+         botaoAmpliar.setTooltip(new Tooltip("Ampliar pré-visualização"));
+         botaoAmpliar.setOnAction(evento -> ampliarPreVisualizacao());
+ 
+-        HBox cabecalho = new HBox(tituloPainel, criarEspacador(), botaoAmpliar);
++        botaoEditar = new Button();
++        botaoEditar.setGraphic(Icones.criar("editar", 20));
++        botaoEditar.getStyleClass().add("botao-icone");
++        botaoEditar.setTooltip(new Tooltip("Editar certificado"));
++        botaoEditar.setDisable(true);
++        botaoEditar.setOnAction(evento -> {
++            if (atividadeSelecionada != null) {
++                editarAtividade(atividadeSelecionada);
++            }
++        });
++
++        HBox cabecalho = new HBox(8, tituloPainel, criarEspacador(), botaoEditar, botaoAmpliar);
+         cabecalho.setAlignment(Pos.CENTER_LEFT);
+ 
+         visualizadorPreview = new ImageView();
+@@ -527,8 +670,10 @@ public class JanelaPrincipal {
+     private void processarPastaSelecionada() {
+         try {
+             Processamento processamento = processadorPasta.processar(pastaSelecionada, classificador);
++            EdicoesManuais.preservar(atividades, processamento.atividades());
+             atividades = processamento.atividades();
+             atualizarTabela();
++            salvarEstado();
+         } catch (IOException erro) {
+             mostrarErro("Não foi possível ler a pasta selecionada: " + erro.getMessage());
+         }
+@@ -563,6 +708,15 @@ public class JanelaPrincipal {
+             porCategoria.computeIfAbsent(atividade.getCategoria(), chave -> new ArrayList<>()).add(atividade);
+         }
+ 
++        Map<Categoria, Boolean> expandidoAntes = new EnumMap<>(Categoria.class);
++        if (tabela.getRoot() != null) {
++            for (TreeItem<LinhaTabela> anterior : tabela.getRoot().getChildren()) {
++                if (!anterior.getChildren().isEmpty()) {
++                    expandidoAntes.put(anterior.getValue().getCategoria(), anterior.isExpanded());
++                }
++            }
++        }
++
+         TreeItem<LinhaTabela> raizArvore = new TreeItem<>();
+         for (ResumoCategoria resumo : resultado.getResumos()) {
+             List<Atividade> itens = porCategoria.getOrDefault(resumo.getCategoria(), List.of());
+@@ -578,12 +732,16 @@ public class JanelaPrincipal {
+             for (Atividade atividade : itens) {
+                 itemCategoria.getChildren().add(new TreeItem<>(LinhaTabela.deAtividade(atividade)));
+             }
+-            itemCategoria.setExpanded(!itens.isEmpty());
++            boolean expandir = !itens.isEmpty()
++                    && (resumo.getCategoria() == categoriaParaExpandir
++                    || expandidoAntes.getOrDefault(resumo.getCategoria(), true));
++            itemCategoria.setExpanded(expandir);
+             itemCategoria.expandedProperty().addListener((observavel, antes, depois) -> tabela.refresh());
+ 
+             raizArvore.getChildren().add(itemCategoria);
+         }
+ 
++        categoriaParaExpandir = null;
+         tabela.setRoot(raizArvore);
+         tabela.refresh();
+ 
+@@ -604,9 +762,137 @@ public class JanelaPrincipal {
+         iconeStatusRodape.setManaged(true);
+     }
+ 
++    private static final DateTimeFormatter FORMATO_DATA_EDICAO = DateTimeFormatter.ofPattern("dd/MM/yyyy");
++
++    private void editarAtividade(Atividade atividade) {
++        Dialog<ButtonType> dialogo = new Dialog<>();
++        dialogo.initOwner(palco);
++        dialogo.setTitle("Editar certificado");
++        dialogo.setHeaderText(atividade.getArquivoNome());
++
++        TextField campoTitulo = new TextField(atividade.getTitulo() == null ? "" : atividade.getTitulo());
++        TextField campoEmissor = new TextField(atividade.getEmissor() == null ? "" : atividade.getEmissor());
++        TextField campoParticipante = new TextField(atividade.getParticipante() == null ? "" : atividade.getParticipante());
++        TextField campoCodigo = new TextField(
++                atividade.getCodigoVerificacao() == null ? "" : atividade.getCodigoVerificacao());
++        TextField campoHoras = new TextField(LinhaTabela.formatarHoras(atividade.getHorasDeclaradas()));
++
++        DatePicker campoData = new DatePicker(atividade.getData());
++        campoData.setEditable(true);
++        campoData.setPromptText("dd/MM/aaaa");
++        campoData.setConverter(new StringConverter<>() {
++            @Override
++            public String toString(LocalDate data) {
++                return data == null ? "" : data.format(FORMATO_DATA_EDICAO);
++            }
++
++            @Override
++            public LocalDate fromString(String texto) {
++                if (texto == null || texto.isBlank()) {
++                    return null;
++                }
++                try {
++                    return LocalDate.parse(texto.trim(), FORMATO_DATA_EDICAO);
++                } catch (DateTimeParseException erro) {
++                    return null;
++                }
++            }
++        });
++
++        ComboBox<Categoria> campoCategoria = new ComboBox<>();
++        campoCategoria.getItems().addAll(Categoria.values());
++        campoCategoria.setValue(atividade.getCategoria());
++
++        for (TextField campo : List.of(campoTitulo, campoEmissor, campoParticipante, campoCodigo)) {
++            campo.setPrefColumnCount(28);
++        }
++
++        GridPane grade = new GridPane();
++        grade.setHgap(12);
++        grade.setVgap(10);
++        grade.setPadding(new Insets(16, 8, 8, 8));
++        grade.addRow(0, new Label("Título"), campoTitulo);
++        grade.addRow(1, new Label("Categoria"), campoCategoria);
++        grade.addRow(2, new Label("Data"), campoData);
++        grade.addRow(3, new Label("Horas"), campoHoras);
++        grade.addRow(4, new Label("Emissor"), campoEmissor);
++        grade.addRow(5, new Label("Participante"), campoParticipante);
++        grade.addRow(6, new Label("Código de verificação"), campoCodigo);
++
++        Label rotuloErro = new Label();
++        rotuloErro.setStyle("-fx-text-fill: #DC2626;");
++        rotuloErro.setManaged(false);
++        rotuloErro.setVisible(false);
++        grade.add(rotuloErro, 0, 7, 2, 1);
++
++        dialogo.getDialogPane().setContent(grade);
++        dialogo.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
++        ((Button) dialogo.getDialogPane().lookupButton(ButtonType.OK)).setText("Salvar");
++        ((Button) dialogo.getDialogPane().lookupButton(ButtonType.CANCEL)).setText("Cancelar");
++
++        // Valida antes de fechar; se algo estiver errado, o diálogo continua aberto.
++        dialogo.getDialogPane().lookupButton(ButtonType.OK).addEventFilter(javafx.event.ActionEvent.ACTION, evento -> {
++            String erro = null;
++            double horas = 0;
++            try {
++                String textoHoras = campoHoras.getText().trim().replace(',', '.');
++                horas = textoHoras.isEmpty() ? 0 : Double.parseDouble(textoHoras);
++                if (horas < 0) {
++                    erro = "As horas não podem ser negativas.";
++                }
++            } catch (NumberFormatException excecao) {
++                erro = "Horas inválidas. Use um número, como 20 ou 7,5.";
++            }
++
++            String textoData = campoData.getEditor().getText();
++            LocalDate data = campoData.getConverter().fromString(textoData);
++            if (erro == null && textoData != null && !textoData.isBlank() && data == null) {
++                erro = "Data inválida. Use o formato dd/mm/aaaa.";
++            }
++
++            if (erro != null) {
++                rotuloErro.setText(erro);
++                rotuloErro.setManaged(true);
++                rotuloErro.setVisible(true);
++                evento.consume();
++            }
++        });
++
++        if (dialogo.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
++            return;
++        }
++
++        String textoHoras = campoHoras.getText().trim().replace(',', '.');
++        atividade.setHorasDeclaradas(textoHoras.isEmpty() ? 0 : Double.parseDouble(textoHoras));
++        atividade.setData(campoData.getConverter().fromString(campoData.getEditor().getText()));
++        atividade.setTitulo(textoOuNulo(campoTitulo.getText()));
++        atividade.setEmissor(textoOuNulo(campoEmissor.getText()));
++        atividade.setParticipante(textoOuNulo(campoParticipante.getText()));
++        atividade.setCodigoVerificacao(textoOuNulo(campoCodigo.getText()));
++
++        Categoria novaCategoria = campoCategoria.getValue();
++        if (novaCategoria != null && novaCategoria != atividade.getCategoria()) {
++            atividade.setCategoria(novaCategoria);
++            atividade.setCategoriaManual(true);
++            categoriaParaExpandir = novaCategoria;
++        }
++
++        atividade.setEditado(true);
++        Validacao.atualizarStatus(atividade);
++
++        atualizarTabela();
++        salvarEstado();
++        selecionarAtividade(atividade);
++    }
++
++    private String textoOuNulo(String texto) {
++        return (texto == null || texto.isBlank()) ? null : texto.trim();
++    }
++
+     private void alternarIgnorado(Atividade atividade) {
+         atividade.setIgnorado(!atividade.isIgnorado());
+         atualizarTabela();
++        salvarEstado();
+     }
+ 
+     private void exportarCsv() {
+@@ -632,25 +918,6 @@ public class JanelaPrincipal {
+         }
+     }
+ 
+-    private void abrirCsv() {
+-        FileChooser seletor = new FileChooser();
+-        seletor.setTitle("Abrir CSV");
+-        seletor.getExtensionFilters().add(new FileChooser.ExtensionFilter("Arquivo CSV", "*.csv"));
+-
+-        java.io.File arquivo = seletor.showOpenDialog(palco);
+-        if (arquivo == null) {
+-            return;
+-        }
+-
+-        try {
+-            atividades = arquivoCsv.abrir(arquivo.toPath());
+-            pastaSelecionada = null;
+-            atualizarTabela();
+-        } catch (IOException erro) {
+-            mostrarErro("Não foi possível abrir o CSV: " + erro.getMessage());
+-        }
+-    }
+-
+     private void mostrarMensagemPreview(String texto) {
+         mensagemPreview.setText(texto);
+         boolean visivel = texto != null && !texto.isBlank();
+@@ -660,6 +927,7 @@ public class JanelaPrincipal {
+ 
+     private void carregarPreVisualizacao(Atividade atividade) {
+         atividadeSelecionada = atividade;
++        botaoEditar.setDisable(false);
+         String chave = atividade.getHashSha256();
+         Image imagemEmCache = cachePreVisualizacao.get(chave);
+         if (imagemEmCache != null) {
+@@ -722,6 +990,7 @@ public class JanelaPrincipal {
+ 
+     private void limparPreVisualizacao() {
+         atividadeSelecionada = null;
++        botaoEditar.setDisable(true);
+         visualizadorPreview.setImage(null);
+         mostrarMensagemPreview("Selecione um certificado para ver a pré-visualização");
+     }
+diff --git a/src/main/resources/categorias.properties b/src/main/resources/categorias.properties
+index b7667da..84ca80c 100644
+--- a/src/main/resources/categorias.properties
++++ b/src/main/resources/categorias.properties
+@@ -2,8 +2,8 @@
+ # Separe varias palavras com virgula. A busca nao diferencia maiusculas/minusculas.
+ # A categoria "Outros" e usada quando nenhuma palavra abaixo for encontrada.
+ 
+-curso=curso,cursos,capacitacao,capacitação,treinamento,formacao,formação
++curso=curso,cursos,course,capacitacao,capacitação,treinamento,formacao,formação
+ palestra=palestra,palestras,webinar,seminario,seminário,bate-papo
+-extensao=extensao,extensão,projeto de extensao,projeto de extensão,programa de extensao,programa de extensão
++extensao=extensao,extensão,projeto de extensao,projeto de extensão,programa de extensao,programa de extensão,declaracao,declaração
+ estagio=estagio,estágio,estagiario,estagiário
+ monitoria=monitoria,monitor,monitora
+diff --git a/src/main/resources/estilo.css b/src/main/resources/estilo.css
+index 83ab633..616f005 100644
+--- a/src/main/resources/estilo.css
++++ b/src/main/resources/estilo.css
+@@ -378,6 +378,12 @@
+     -fx-opacity: 0.5;
+ }
+ 
++.linha-alvo-drop {
++    -fx-background-color: rgba(37, 99, 235, 0.16);
++    -fx-border-color: #2563EB;
++    -fx-border-width: 0 0 0 3;
++}
++
+ .ponto-categoria {
+     -fx-stroke: transparent;
+ }
+diff --git a/src/test/java/br/com/atividadescomplementares/nucleo/ArmazenamentoAtividadesTest.java b/src/test/java/br/com/atividadescomplementares/nucleo/ArmazenamentoAtividadesTest.java
+new file mode 100644
+index 0000000..2e8c0e8
+--- /dev/null
++++ b/src/test/java/br/com/atividadescomplementares/nucleo/ArmazenamentoAtividadesTest.java
+@@ -0,0 +1,88 @@
++package br.com.atividadescomplementares.nucleo;
++
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.io.TempDir;
++
++import java.io.IOException;
++import java.nio.file.Path;
++import java.time.LocalDate;
++import java.util.ArrayList;
++import java.util.List;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertTrue;
++
++public class ArmazenamentoAtividadesTest {
++
++    @TempDir
++    Path pasta;
++
++    @Test
++    void salvarECarregarMantemCaminhoCategoriaManualEObservacao() throws IOException {
++        Path pdf = pasta.resolve("certificados").resolve("a.pdf");
++        Atividade atividade = new Atividade("a.pdf", pdf, "hash1");
++        atividade.setTitulo("Titulo");
++        atividade.setCategoria(Categoria.EXTENSAO);
++        atividade.setCategoriaManual(true);
++        atividade.setObservacao("campos faltando: data");
++        atividade.setData(LocalDate.of(2026, 5, 1));
++        atividade.setHorasDeclaradas(10);
++
++        ArmazenamentoAtividades armazenamento = new ArmazenamentoAtividades();
++        Path destino = pasta.resolve("atividades.csv");
++        armazenamento.salvar(List.of(atividade), destino);
++
++        List<Atividade> lidas = armazenamento.carregar(destino);
++        assertEquals(1, lidas.size());
++        Atividade lida = lidas.get(0);
++        assertEquals(pdf, lida.getCaminhoArquivo());
++        assertEquals(Categoria.EXTENSAO, lida.getCategoria());
++        assertTrue(lida.isCategoriaManual());
++        assertEquals("campos faltando: data", lida.getObservacao());
++    }
++
++    @Test
++    void carregarSemArquivoDevolveListaVazia() throws IOException {
++        assertTrue(new ArmazenamentoAtividades().carregar(pasta.resolve("nao-existe.csv")).isEmpty());
++    }
++
++    @Test
++    void edicoesManuaisSobrevivemAoReprocessamento() {
++        Path pdf = pasta.resolve("a.pdf");
++        Atividade antiga = new Atividade("a.pdf", pdf, "h");
++        antiga.setCategoria(Categoria.EXTENSAO);
++        antiga.setCategoriaManual(true);
++        antiga.setIgnorado(true);
++
++        Atividade nova = new Atividade("a.pdf", pdf, "h");
++        nova.setCategoria(Categoria.CURSO);
++        antiga.setEditado(true);
++        antiga.setTitulo("Titulo corrigido");
++        antiga.setHorasDeclaradas(12);
++        nova.setStatus(Status.REVISAR);
++        nova.setObservacao("campos faltando: horas");
++        Atividade outra = new Atividade("b.pdf", pasta.resolve("b.pdf"), "h2");
++        outra.setCategoria(Categoria.PALESTRA);
++
++        EdicoesManuais.preservar(new ArrayList<>(List.of(antiga)), List.of(nova, outra));
++
++        assertEquals(Categoria.EXTENSAO, nova.getCategoria());
++        assertTrue(nova.isIgnorado());
++        assertEquals("Titulo corrigido", nova.getTitulo());
++        assertEquals(12, nova.getHorasDeclaradas());
++        assertEquals(Status.OK, nova.getStatus());
++        assertEquals(Categoria.PALESTRA, outra.getCategoria());
++    }
++
++    @Test
++    void configMantemPastaETemaJuntos() throws IOException {
++        ArquivoConfig config = new ArquivoConfig();
++        Path arquivo = pasta.resolve("config.properties");
++        config.salvarTema("escuro", arquivo);
++        config.salvarPasta(pasta, arquivo);
++        config.salvarTema("claro", arquivo);
++
++        assertEquals("claro", config.lerTema(arquivo));
++        assertEquals(pasta, config.lerPasta(arquivo));
++    }
++}
+diff --git a/src/test/java/br/com/atividadescomplementares/nucleo/ClassificadorTest.java b/src/test/java/br/com/atividadescomplementares/nucleo/ClassificadorTest.java
+new file mode 100644
+index 0000000..54151ff
+--- /dev/null
++++ b/src/test/java/br/com/atividadescomplementares/nucleo/ClassificadorTest.java
+@@ -0,0 +1,47 @@
++package br.com.atividadescomplementares.nucleo;
++
++import org.junit.jupiter.api.Test;
++
++import java.io.IOException;
++import java.io.InputStream;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.nio.file.StandardCopyOption;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++public class ClassificadorTest {
++
++    private Classificador carregarPadrao() throws IOException {
++        Path arquivo = Files.createTempFile("categorias", ".properties");
++        try (InputStream entrada = getClass().getResourceAsStream("/categorias.properties")) {
++            Files.copy(entrada, arquivo, StandardCopyOption.REPLACE_EXISTING);
++        }
++        return Classificador.carregarDe(arquivo);
++    }
++
++    @Test
++    void declaracaoDeExtensaoNaoCaiEmCursoMesmoCitandoOCursoDoAluno() throws IOException {
++        Classificador classificador = carregarPadrao();
++        String texto = "Declaração. Declaramos que o aluno, do curso de Ciência da Computação, participou do projeto.";
++        assertEquals(Categoria.EXTENSAO, classificador.classificar("Projeto X", texto));
++    }
++
++    @Test
++    void palavraDeclaracaoSozinhaClassificaComoExtensao() throws IOException {
++        assertEquals(Categoria.EXTENSAO, carregarPadrao().classificar(null, "DECLARAÇÃO de participação"));
++    }
++
++    @Test
++    void certificadoEmInglesComCourseVaiParaCurso() throws IOException {
++        assertEquals(Categoria.CURSO, carregarPadrao().classificar("Java", "Certificate of completion of the course Java"));
++    }
++
++    @Test
++    void cursoPalestraEOutrosContinuamFuncionando() throws IOException {
++        Classificador classificador = carregarPadrao();
++        assertEquals(Categoria.CURSO, classificador.classificar("Curso de Java", "carga horária 20h"));
++        assertEquals(Categoria.PALESTRA, classificador.classificar("Palestra de segurança", ""));
++        assertEquals(Categoria.OUTROS, classificador.classificar("Algo", "sem palavras conhecidas"));
++    }
++}
+diff --git a/src/test/java/br/com/atividadescomplementares/nucleo/ExtratorCamposTest.java b/src/test/java/br/com/atividadescomplementares/nucleo/ExtratorCamposTest.java
+index 1dcbe2b..f3f259d 100644
+--- a/src/test/java/br/com/atividadescomplementares/nucleo/ExtratorCamposTest.java
++++ b/src/test/java/br/com/atividadescomplementares/nucleo/ExtratorCamposTest.java
+@@ -73,4 +73,11 @@ public class ExtratorCamposTest {
+         assertTrue(campos.camposFaltando().contains("horas"));
+         assertTrue(campos.camposFaltando().contains("participante"));
+     }
++
++    @Test
++    void leHorasEscritasEmIngles() {
++        assertEquals(20.0, new ExtratorCampos().extrair("Certificate of the course Java Basics, 20 hours, 12/03/2026").horasDeclaradas());
++        assertEquals(8.0, new ExtratorCampos().extrair("Workshop completed. Hours: 8").horasDeclaradas());
++        assertEquals(30.0, new ExtratorCampos().extrair("A 30-hour training").horasDeclaradas());
++    }
+ }
+diff --git a/src/test/java/br/com/atividadescomplementares/nucleo/ValidacaoTest.java b/src/test/java/br/com/atividadescomplementares/nucleo/ValidacaoTest.java
+new file mode 100644
+index 0000000..77c8b1f
+--- /dev/null
++++ b/src/test/java/br/com/atividadescomplementares/nucleo/ValidacaoTest.java
+@@ -0,0 +1,73 @@
++package br.com.atividadescomplementares.nucleo;
++
++import org.junit.jupiter.api.Test;
++
++import java.nio.file.Path;
++import java.time.LocalDate;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++public class ValidacaoTest {
++
++    private Atividade completa() {
++        Atividade atividade = new Atividade("a.pdf", Path.of("a.pdf"), "h");
++        atividade.setTitulo("Titulo");
++        atividade.setCategoria(Categoria.CURSO);
++        atividade.setData(LocalDate.of(2026, 1, 10));
++        atividade.setHorasDeclaradas(20);
++        return atividade;
++    }
++
++    @Test
++    void emissorEParticipanteSaoOpcionais() {
++        Atividade atividade = completa();
++        Validacao.atualizarStatus(atividade);
++        assertEquals(Status.OK, atividade.getStatus());
++    }
++
++    @Test
++    void faltandoHorasDataTituloOuCategoriaFicaEmRevisar() {
++        Atividade semHoras = completa();
++        semHoras.setHorasDeclaradas(0);
++        Validacao.atualizarStatus(semHoras);
++        assertEquals(Status.REVISAR, semHoras.getStatus());
++        assertEquals("campos faltando: horas", semHoras.getObservacao());
++
++        Atividade semCategoria = completa();
++        semCategoria.setCategoria(Categoria.OUTROS);
++        semCategoria.setData(null);
++        Validacao.atualizarStatus(semCategoria);
++        assertEquals(Status.REVISAR, semCategoria.getStatus());
++        assertEquals("campos faltando: categoria, data", semCategoria.getObservacao());
++    }
++
++    @Test
++    void salvarSemPreencherNaoValida() {
++        Atividade atividade = completa();
++        atividade.setHorasDeclaradas(0);
++        Validacao.atualizarStatus(atividade);
++        atividade.setEditado(true);
++        Validacao.atualizarStatus(atividade);
++        assertEquals(Status.REVISAR, atividade.getStatus());
++    }
++
++    @Test
++    void preencherOQueFaltavaValidaELimpaOMotivo() {
++        Atividade atividade = completa();
++        atividade.setHorasDeclaradas(0);
++        Validacao.atualizarStatus(atividade);
++        atividade.setHorasDeclaradas(8);
++        Validacao.atualizarStatus(atividade);
++        assertEquals(Status.OK, atividade.getStatus());
++        assertEquals("", atividade.getObservacao());
++    }
++
++    @Test
++    void duplicadosNaoSaoAlterados() {
++        Atividade atividade = completa();
++        atividade.setStatus(Status.DUPLICADO);
++        atividade.setHorasDeclaradas(0);
++        Validacao.atualizarStatus(atividade);
++        assertEquals(Status.DUPLICADO, atividade.getStatus());
++    }
++}

@@ -63,10 +63,7 @@ public class ProcessadorPasta {
         Categoria categoria = classificador.classificar(campos.titulo(), textoExtraido.texto());
         atividade.setCategoria(categoria);
 
-        if (!campos.camposFaltando().isEmpty()) {
-            atividade.setStatus(Status.REVISAR);
-            atividade.setObservacao("campos faltando: " + String.join(", ", campos.camposFaltando()));
-        }
+        Validacao.atualizarStatus(atividade);
 
         return atividade;
     }

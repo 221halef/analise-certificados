@@ -73,4 +73,11 @@ public class ExtratorCamposTest {
         assertTrue(campos.camposFaltando().contains("horas"));
         assertTrue(campos.camposFaltando().contains("participante"));
     }
+
+    @Test
+    void leHorasEscritasEmIngles() {
+        assertEquals(20.0, new ExtratorCampos().extrair("Certificate of the course Java Basics, 20 hours, 12/03/2026").horasDeclaradas());
+        assertEquals(8.0, new ExtratorCampos().extrair("Workshop completed. Hours: 8").horasDeclaradas());
+        assertEquals(30.0, new ExtratorCampos().extrair("A 30-hour training").horasDeclaradas());
+    }
 }
