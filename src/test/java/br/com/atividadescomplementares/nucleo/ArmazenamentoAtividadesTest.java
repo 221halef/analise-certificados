@@ -58,6 +58,7 @@ public class ArmazenamentoAtividadesTest {
         nova.setCategoria(Categoria.CURSO);
         antiga.setEditado(true);
         antiga.setTitulo("Titulo corrigido");
+        antiga.setData(LocalDate.of(2026, 5, 1));
         antiga.setHorasDeclaradas(12);
         nova.setStatus(Status.REVISAR);
         nova.setObservacao("campos faltando: horas");
