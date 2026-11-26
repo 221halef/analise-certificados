@@ -52,15 +52,13 @@ Os certificados de exemplo na pasta [`exemplos/`](exemplos) são **fictícios**,
 
 ## Capturas de tela
 
-> As imagens abaixo foram feitas com a identidade visual anterior (nome e ícone antigos) e estão desatualizadas. Elas serão substituídas após a validação da nova interface do SOGAC.
+Tela principal do SOGAC no tema claro:
 
-Tela principal no tema claro:
+![Tela principal do SOGAC no tema claro](images/claro.png)
 
-![Tela principal da aplicação no tema claro](images/light-theme.jpg)
+Tela principal do SOGAC no tema escuro:
 
-Tela principal no tema escuro:
-
-![Tela principal da aplicação no tema escuro](images/dark-theme.jpg)
+![Tela principal do SOGAC no tema escuro](images/escuro.png)
 
 ## Arquitetura
 
