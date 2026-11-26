@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-VERSAO="1.1.1"
+VERSAO="1.2.0"
 NOME_APP="SOGAC"
 PASTA_SAIDA="target/instalador"
 
