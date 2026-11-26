@@ -8,6 +8,7 @@
     <artifactId>atividades-complementares</artifactId>
     <version>1.1.1</version>
     <packaging>jar</packaging>
+    <name>SOGAC - Sistema de Organização e Gerenciamento de Atividades Complementares</name>
 
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
@@ -97,6 +98,17 @@
     </profiles>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>src/main/packaging/icones</directory>
+                <includes>
+                    <include>sogac.png</include>
+                </includes>
+            </resource>
+        </resources>
         <finalName>atividades-complementares</finalName>
         <plugins>
             <plugin>

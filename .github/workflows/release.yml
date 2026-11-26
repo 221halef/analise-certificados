@@ -49,14 +49,18 @@ jobs:
         run: |
           mkdir -p target/instalador
           jpackage --input target/entrada --dest target/instalador \
-            --name AtividadesComplementares --app-version "$APP_VERSION" \
+            --name SOGAC --app-version "$APP_VERSION" \
+            --description "Sistema de Organização e Gerenciamento de Atividades Complementares" \
             --main-jar atividades-complementares.jar \
             --main-class br.com.atividadescomplementares.ui.Launcher \
+            --icon src/main/packaging/icones/sogac.png \
             --type deb --linux-shortcut
           jpackage --input target/entrada --dest target/instalador \
-            --name AtividadesComplementares --app-version "$APP_VERSION" \
+            --name SOGAC --app-version "$APP_VERSION" \
+            --description "Sistema de Organização e Gerenciamento de Atividades Complementares" \
             --main-jar atividades-complementares.jar \
             --main-class br.com.atividadescomplementares.ui.Launcher \
+            --icon src/main/packaging/icones/sogac.png \
             --type rpm --linux-shortcut
 
       - name: Gerar instalador (Windows)
@@ -65,19 +69,23 @@ jobs:
         run: |
           mkdir -p target/instalador
           jpackage --input target/entrada --dest target/instalador \
-            --name AtividadesComplementares --app-version "$APP_VERSION" \
+            --name SOGAC --app-version "$APP_VERSION" \
+            --description "Sistema de Organização e Gerenciamento de Atividades Complementares" \
             --main-jar atividades-complementares.jar \
             --main-class br.com.atividadescomplementares.ui.Launcher \
-            --type msi --win-shortcut --win-dir-chooser --win-console
+            --icon src/main/packaging/icones/sogac.ico \
+            --type msi --win-shortcut --win-dir-chooser
 
       - name: Gerar instalador (macOS)
         if: runner.os == 'macOS'
         run: |
           mkdir -p target/instalador
           jpackage --input target/entrada --dest target/instalador \
-            --name AtividadesComplementares --app-version "$APP_VERSION" \
+            --name SOGAC --app-version "$APP_VERSION" \
+            --description "Sistema de Organização e Gerenciamento de Atividades Complementares" \
             --main-jar atividades-complementares.jar \
             --main-class br.com.atividadescomplementares.ui.Launcher \
+            --icon src/main/packaging/icones/sogac.icns \
             --type dmg
 
       - name: Publicar artefatos da release

@@ -86,6 +86,11 @@
     -fx-text-fill: -app-texto;
 }
 
+.subtitulo-app {
+    -fx-font-size: 12px;
+    -fx-text-fill: -app-texto-suave;
+}
+
 .titulo-painel {
     -fx-font-size: 16px;
     -fx-font-weight: bold;
@@ -150,7 +155,20 @@
     -fx-stroke-line-join: round;
 }
 
-.icone-capelo {
+.icone-relogio {
+    -fx-fill: transparent;
+    -fx-stroke: -app-destaque-texto;
+}
+
+.icone-relogio-marcacoes {
+    -fx-stroke-width: 1.4;
+}
+
+.icone-relogio-ponteiros {
+    -fx-stroke-width: 2.4;
+}
+
+.icone-relogio-centro {
     -fx-fill: -app-destaque-texto;
     -fx-stroke: -app-destaque-texto;
 }

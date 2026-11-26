@@ -31,7 +31,7 @@ public final class Launcher {
     private static void registrarErro(Thread thread, Throwable erro) {
         StringWriter texto = new StringWriter();
         try (PrintWriter escritor = new PrintWriter(texto)) {
-            escritor.println("Falha ao iniciar o Atividades Complementares");
+            escritor.println("Falha ao iniciar o SOGAC");
             escritor.println("Data: " + LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
             escritor.println("Sistema: " + System.getProperty("os.name") + " " + System.getProperty("os.version"));
             escritor.println("Java: " + System.getProperty("java.version"));

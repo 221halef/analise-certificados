@@ -139,7 +139,8 @@ public class JanelaPrincipal {
         cena.getStylesheets().add(getClass().getResource("/estilo.css").toExternalForm());
         aplicarTema();
 
-        palco.setTitle("Atividades complementares");
+        palco.getIcons().add(new Image(getClass().getResourceAsStream("/sogac.png")));
+        palco.setTitle("SOGAC - Sistema de Organização e Gerenciamento de Atividades Complementares");
         palco.setMinWidth(1000);
         palco.setMinHeight(640);
         palco.setScene(cena);
@@ -189,12 +190,19 @@ public class JanelaPrincipal {
     }
 
     private HBox construirBarraSuperior() {
-        StackPane iconeApp = Icones.criar("capelo", 40);
+        StackPane iconeApp = Icones.relogio(40);
 
-        Label titulo = new Label("Atividades complementares");
-        titulo.getStyleClass().add("titulo-app");
+        Label sigla = new Label("SOGAC");
+        sigla.getStyleClass().add("titulo-app");
 
-        HBox grupoTitulo = new HBox(14, iconeApp, titulo);
+        Label nomeCompleto = new Label(
+                "Sistema de Organização e Gerenciamento de Atividades Complementares");
+        nomeCompleto.getStyleClass().add("subtitulo-app");
+
+        VBox textosTitulo = new VBox(0, sigla, nomeCompleto);
+        textosTitulo.setAlignment(Pos.CENTER_LEFT);
+
+        HBox grupoTitulo = new HBox(14, iconeApp, textosTitulo);
         grupoTitulo.setAlignment(Pos.CENTER_LEFT);
 
         Button botaoPasta = criarBotao("Pasta", "pasta", "botao-secundario");
@@ -903,7 +911,7 @@ public class JanelaPrincipal {
 
         FileChooser seletor = new FileChooser();
         seletor.setTitle("Exportar CSV");
-        seletor.setInitialFileName("atividades-complementares.csv");
+        seletor.setInitialFileName("sogac.csv");
         seletor.getExtensionFilters().add(new FileChooser.ExtensionFilter("Arquivo CSV", "*.csv"));
 
         java.io.File arquivo = seletor.showSaveDialog(palco);

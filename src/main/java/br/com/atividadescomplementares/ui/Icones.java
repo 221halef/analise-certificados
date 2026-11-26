@@ -22,7 +22,6 @@ public final class Icones {
             Map.entry("seta-baixo", "M6 9l6 6 6-6"),
             Map.entry("seta-cima", "M18 15l-6-6-6 6"),
             Map.entry("seta-direita", "M9 18l6-6-6-6"),
-            Map.entry("capelo", "M12 3L1 9l11 6 11-6z M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5 M23 9v6"),
             Map.entry("documento-corpo", "M6 2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"),
             Map.entry("documento-linhas", "M8 13h8 M8 17h8 M8 9h3")
     );
@@ -36,6 +35,31 @@ public final class Icones {
         caminho.getStyleClass().addAll("icone", "icone-" + nome);
         escalar(caminho, tamanho / 24.0);
         return embalar(new Group(caminho), tamanho);
+    }
+
+    public static StackPane relogio(double tamanho) {
+        SVGPath mostrador = new SVGPath();
+        mostrador.setContent("M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20");
+        mostrador.getStyleClass().addAll("icone", "icone-relogio");
+
+        SVGPath marcacoes = new SVGPath();
+        marcacoes.setContent("M12 3V4.4 M16.5 4.2L15.8 5.4 M19.8 7.5L18.6 8.2 "
+                + "M21 12H19.6 M19.8 16.5L18.6 15.8 M16.5 19.8L15.8 18.6 "
+                + "M12 21V19.6 M7.5 19.8L8.2 18.6 M4.2 16.5L5.4 15.8 "
+                + "M3 12H4.4 M4.2 7.5L5.4 8.2 M7.5 4.2L8.2 5.4");
+        marcacoes.getStyleClass().addAll("icone", "icone-relogio", "icone-relogio-marcacoes");
+
+        SVGPath ponteiros = new SVGPath();
+        ponteiros.setContent("M12 12L7.7 9.5 M12 12L18.1 8.5");
+        ponteiros.getStyleClass().addAll("icone", "icone-relogio", "icone-relogio-ponteiros");
+
+        SVGPath centro = new SVGPath();
+        centro.setContent("M12 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2");
+        centro.getStyleClass().addAll("icone", "icone-relogio-centro");
+
+        Group grupo = new Group(mostrador, marcacoes, ponteiros, centro);
+        escalar(grupo, tamanho / 24.0);
+        return embalar(new Group(grupo), tamanho);
     }
 
     public static StackPane documento(double tamanho) {

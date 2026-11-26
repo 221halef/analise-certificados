@@ -1,20 +1,22 @@
-# Sistema de Análise de Certificados
+# SOGAC - Sistema de Organização e Gerenciamento de Atividades Complementares
 
-Programa de desktop que ajuda estudantes a controlar as horas de atividades complementares da faculdade a partir dos certificados em PDF. É uma ferramenta simples, local e sem IA: você escolhe uma pasta com os certificados, o programa lê os arquivos, extrai os dados automaticamente e organiza tudo por categoria, com os totais de horas já calculados.
+**SOGAC** é a sigla de **Sistema de Organização e Gerenciamento de Atividades Complementares**. É um programa de desktop que ajuda estudantes a controlar as horas de atividades complementares da faculdade a partir dos certificados em PDF. É uma ferramenta simples, local e sem IA: você escolhe uma pasta com os certificados, o sistema lê os arquivos, extrai os dados automaticamente e organiza tudo por categoria, com os totais de horas já calculados.
 
-## Funcionalidades
+## O que o sistema faz
 
-- Leitura de PDFs de uma pasta escolhida pelo usuário.
-- Extração automática de título, emissor, data, carga horária, código de verificação e participante.
-- Classificação por categoria (Curso, Palestra, Extensão, Estágio, Monitoria, Outros) usando palavras-chave configuráveis.
-- Soma das horas por item, por categoria e no total geral.
-- Detecção de certificados duplicados (exatos e possíveis).
-- Pré-visualização da primeira página do certificado selecionado.
-- Sinalização de certificados que precisam de revisão (sem texto extraível ou campos faltando).
-- Exportação e abertura de CSV (compatível com Excel em português).
-- Interface moderna e minimalista, com tema claro e escuro (tema [AtlantaFX](https://github.com/mkpaz/atlantafx)).
+- **Leitura dos PDFs** de uma pasta escolhida pelo usuário.
+- **Extração automática** de título, emissor, data, carga horária, código de verificação e participante.
+- **Classificação por categoria** (Curso, Palestra, Extensão, Estágio, Monitoria, Outros) usando palavras-chave configuráveis.
+- **Soma das horas** por item, por categoria e no total geral.
+- **Detecção de certificados duplicados** (exatos e possíveis).
+- **Pré-visualização** da primeira página do certificado selecionado.
+- **Edição manual** de título, data, horas e dos demais dados do certificado.
+- **Arrastar entre categorias** para corrigir a classificação; a mudança fica salva.
+- **Validação** dos campos obrigatórios: título, categoria, data e horas.
+- **Salvamento automático** das atividades e das configurações no computador do usuário.
+- **Exportação em CSV**, compatível com Excel em português.
 
-## O que o programa NÃO faz
+## O que o sistema NÃO faz
 
 - Não valida a autenticidade de um certificado: ele extrai os dados e guarda o código de verificação (quando existe) para você conferir manualmente no site do emissor.
 - Não aplica regras de nenhuma instituição (limite de horas por categoria, máximo por item etc.): ele mostra as horas que constam nos certificados, e a conferência com o regulamento do seu curso é sua.
@@ -38,7 +40,7 @@ mvn test
 ## Como usar
 
 1. Clique em **Pasta** e escolha a pasta com os certificados em PDF.
-2. O programa lê os arquivos e organiza tudo na tabela, agrupado por categoria, com o total de horas de cada uma e o total geral.
+2. O sistema lê os arquivos e organiza tudo na tabela, agrupado por categoria, com o total de horas de cada uma e o total geral.
 3. Clique em um certificado para ver a pré-visualização da primeira página ao lado.
 4. Dê duplo clique em um item para marcá-lo como ignorado (ele some da soma de horas).
 5. Se um certificado caiu na categoria errada, arraste-o para a categoria certa. A mudança fica salva.
@@ -49,6 +51,8 @@ mvn test
 Os certificados de exemplo na pasta [`exemplos/`](exemplos) são **fictícios**, só para teste.
 
 ## Capturas de tela
+
+> As imagens abaixo foram feitas com a identidade visual anterior (nome e ícone antigos) e estão desatualizadas. Elas serão substituídas após a validação da nova interface do SOGAC.
 
 Tela principal no tema claro:
 
@@ -65,7 +69,7 @@ O código é dividido em dois pacotes:
 - `nucleo`: modelo de dados, leitura de PDF, extração de campos, classificação, cálculo de horas, detecção de duplicados e arquivos (CSV e configurações). Não depende do JavaFX, para poder ser testado sem abrir janela.
 - `ui`: interface gráfica em JavaFX.
 
-Os dados do usuário (certificados lidos, categorias, tema e última pasta) ficam em `~/.atividades-complementares/`, fora do repositório.
+Os dados do usuário (certificados lidos, categorias, tema e última pasta) ficam em `~/.atividades-complementares/`, fora do repositório. O nome da pasta é o antigo, mantido assim para não perder os dados de quem já usa o sistema.
 
 ## Instalação (sem precisar instalar Java)
 
@@ -94,4 +98,3 @@ Certificados reais **nunca** devem ser enviados para este repositório. A pasta 
 - [Feather Icons](https://feathericons.com/) — MIT License (os desenhos dos ícones da interface vêm dele).
 
 Este projeto está licenciado sob a licença [MIT](LICENSE).
-

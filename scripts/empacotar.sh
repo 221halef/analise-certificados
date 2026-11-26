@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSAO="1.1.1"
-NOME_APP="AtividadesComplementares"
+NOME_APP="SOGAC"
 PASTA_SAIDA="target/instalador"
 
 echo "Compilando o projeto..."
@@ -26,18 +26,22 @@ case "$SISTEMA" in
       --input target/entrada \
       --dest "$PASTA_SAIDA" \
       --name "$NOME_APP" \
+      --description "Sistema de Organização e Gerenciamento de Atividades Complementares" \
       --app-version "$VERSAO" \
       --main-jar atividades-complementares.jar \
       --main-class br.com.atividadescomplementares.ui.Launcher \
+      --icon src/main/packaging/icones/sogac.png \
       --type deb \
       --linux-shortcut
     jpackage \
       --input target/entrada \
       --dest "$PASTA_SAIDA" \
       --name "$NOME_APP" \
+      --description "Sistema de Organização e Gerenciamento de Atividades Complementares" \
       --app-version "$VERSAO" \
       --main-jar atividades-complementares.jar \
       --main-class br.com.atividadescomplementares.ui.Launcher \
+      --icon src/main/packaging/icones/sogac.png \
       --type rpm \
       --linux-shortcut
     ;;
@@ -46,9 +50,11 @@ case "$SISTEMA" in
       --input target/entrada \
       --dest "$PASTA_SAIDA" \
       --name "$NOME_APP" \
+      --description "Sistema de Organização e Gerenciamento de Atividades Complementares" \
       --app-version "$VERSAO" \
       --main-jar atividades-complementares.jar \
       --main-class br.com.atividadescomplementares.ui.Launcher \
+      --icon src/main/packaging/icones/sogac.icns \
       --type dmg
     ;;
   MINGW*|MSYS*|CYGWIN*)
@@ -56,13 +62,14 @@ case "$SISTEMA" in
       --input target/entrada \
       --dest "$PASTA_SAIDA" \
       --name "$NOME_APP" \
+      --description "Sistema de Organização e Gerenciamento de Atividades Complementares" \
       --app-version "$VERSAO" \
       --main-jar atividades-complementares.jar \
       --main-class br.com.atividadescomplementares.ui.Launcher \
+      --icon src/main/packaging/icones/sogac.ico \
       --type msi \
       --win-shortcut \
-      --win-dir-chooser \
-      --win-console
+      --win-dir-chooser
     ;;
   *)
     echo "Sistema operacional não reconhecido: $SISTEMA"
